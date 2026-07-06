@@ -1,0 +1,213 @@
+.admin-reports-page {
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.admin-reports-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.admin-reports-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--brand-navy);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--brand-gradient-soft);
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid #d7e3f5;
+}
+
+.admin-reports-title::before {
+  content: "";
+  width: 5px;
+  height: 1.35em;
+  border-radius: 3px;
+  background: var(--brand-gradient);
+  flex-shrink: 0;
+}
+
+.ar-column-selector {
+  margin-bottom: 0.75rem;
+  animation: fadeIn 0.35s ease forwards;
+}
+
+.ar-column-selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.ar-column-selector-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.ar-column-selector-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.ar-column-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.375rem;
+}
+
+.ar-column-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 0.75rem;
+  margin-bottom: 0.375rem;
+  padding-top: 0.625rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.ar-column-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--gray-700);
+  cursor: pointer;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.ar-column-checkbox:hover {
+  background: var(--gray-50);
+}
+
+.ar-column-checkbox.checked {
+  color: var(--color-primary);
+  font-weight: 500;
+  background: var(--color-primary-light);
+}
+
+.ar-column-checkbox input[type="checkbox"] {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.admin-reports-filter {
+  margin-bottom: 0.75rem;
+  animation: fadeIn 0.4s ease forwards;
+}
+
+.admin-reports-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 1rem;
+  align-items: end;
+}
+
+.admin-reports-filter-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-bottom: 0.125rem;
+}
+
+.admin-reports-table-card {
+  overflow: hidden;
+  animation: fadeIn 0.5s ease forwards;
+}
+
+.admin-reports-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.admin-reports-table thead {
+  background: var(--gray-50);
+  position: sticky;
+  top: 0;
+}
+
+.admin-reports-table th {
+  text-align: left;
+  padding: 0.625rem 0.625rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border-bottom: 2px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.admin-reports-table th.col-dynamic {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary-border);
+}
+
+.admin-reports-table td {
+  padding: 0.5rem 0.625rem;
+  color: var(--gray-700);
+  border-bottom: 1px solid var(--gray-100);
+  vertical-align: middle;
+  font-size: 0.8125rem;
+}
+
+.admin-reports-table td.col-id {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  width: 40px;
+}
+
+.admin-reports-table td.col-text {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-reports-table td.col-dynamic {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.admin-reports-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.admin-reports-table tbody tr:hover {
+  background: var(--gray-50);
+}
+
+.admin-reports-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 768px) {
+  .ar-column-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+
+  .admin-reports-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-reports-table th,
+  .admin-reports-table td {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+  }
+}

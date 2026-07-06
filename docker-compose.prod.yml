@@ -1,0 +1,54 @@
+# Compose PRODUCTION - all-in-one (db + backend + frontend)
+# Chạy:  docker compose -f docker-compose.prod.yml up -d --build
+# Migrate: docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+#
+# LƯU Ý: file dev docker-compose.yml giữ nguyên. File này tách riêng.
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: webapp-db
+    restart: always
+    ports:
+      - "5434:5432"          # mở cho DataGrip local (prod thật: bỏ dòng này)
+    environment:
+      POSTGRES_USER: webapp
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: report
+    volumes:
+      - pgdata:/var/lib/postgresql/18
+    # KHÔNG mở port ra host ở prod (chỉ backend trong mạng nội bộ cần)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webapp -d report"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./report_be
+    container_name: webapp-be
+    restart: always
+    env_file:
+      - ./report_be/.env
+    # DATABASE_URL trong .env phải trỏ host = "postgres" (tên service), cổng 5432:
+    #   postgresql://<user>:<pass>@postgres:5432/<db>
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8000"        # chỉ nội bộ, không map ra host
+
+  frontend:
+    build:
+      context: ./report_fe
+      args:
+        VITE_API_URL: /api      # cùng origin, nginx proxy /api -> backend
+    container_name: webapp-fe
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"        # HTTP. Thêm nginx/certbot ngoài cho 443/HTTPS.
+
+volumes:
+  pgdata:
