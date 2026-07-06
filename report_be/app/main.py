@@ -14,7 +14,7 @@ app = FastAPI()
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET_KEY")
+    secret_key=settings.SESSION_SECRET_KEY
 )
 app.add_middleware(
     CORSMiddleware,

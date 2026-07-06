@@ -28,7 +28,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     userinfo = token["userinfo"]
     email = userinfo["email"]
 
-    if not email.endswith(".com"):#("@hdc-flowtech.com")
+    if not email.endswith("@hdc-flowtech.com"):#("@hdc-flowtech.com")
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/login?error=not_company",
             status_code=302,
