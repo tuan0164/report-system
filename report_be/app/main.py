@@ -10,7 +10,7 @@ from app.api.field_options import router as field_options_router
 from app.api.add_column import router as add_column_router
 from app.api.dynamic_columns import router as dynamic_columns_router
 import os
-app = FastAPI()
+app = FastAPI(root_path="/api")
 
 app.add_middleware(
     SessionMiddleware,

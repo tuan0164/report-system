@@ -124,8 +124,31 @@
 }
 
 .admin-reports-table-card {
-  overflow: hidden;
+  overflow: visible;
   animation: fadeIn 0.5s ease forwards;
+}
+
+.admin-reports-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox: an thanh cuon ngang that */
+}
+
+.admin-reports-scroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari: an thanh cuon ngang that */
+}
+
+.admin-reports-hbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--gray-50);
+}
+
+.admin-reports-hbar-spacer {
+  height: 1px;
 }
 
 .admin-reports-table {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { getAllReports, getUsers } from "../api/reports";
 import { getDynamicColumns } from "../api/dynamicColumns";
 import "./AdminReports.css";
@@ -47,6 +47,17 @@ export default function AdminReports() {
   const [visibleColumns, setVisibleColumns] = useState(() => {
     return buildInitialVisible(loadSavedColumns(), []);
   });
+
+  const scrollRef = useRef(null);
+  const barRef = useRef(null);
+  const [tableWidth, setTableWidth] = useState(0);
+
+  const syncFromScroll = () => {
+    if (scrollRef.current && barRef.current) barRef.current.scrollLeft = scrollRef.current.scrollLeft;
+  };
+  const syncFromBar = () => {
+    if (scrollRef.current && barRef.current) scrollRef.current.scrollLeft = barRef.current.scrollLeft;
+  };
 
   const fetchReports = useCallback((email, date) => {
     setLoading(true);
@@ -122,6 +133,11 @@ export default function AdminReports() {
     ...STATIC_COLUMNS.map((c) => c.key),
     ...dynamicColumns.map((c) => c.name),
   ];
+
+  useLayoutEffect(() => {
+    const table = scrollRef.current?.querySelector("table");
+    setTableWidth(table ? table.offsetWidth : 0);
+  }, [reports, visibleColumns, dynamicColumns, loading]);
 
   return (
     <div className="admin-reports-page">
@@ -216,7 +232,7 @@ export default function AdminReports() {
             <p>Đang tải báo cáo...</p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="admin-reports-scroll" ref={scrollRef} onScroll={syncFromScroll}>
             <table className="admin-reports-table">
               <thead>
                 <tr>
@@ -262,6 +278,11 @@ export default function AdminReports() {
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+        {!loading && (
+          <div className="admin-reports-hbar" ref={barRef} onScroll={syncFromBar}>
+            <div className="admin-reports-hbar-spacer" style={{ width: tableWidth }} />
           </div>
         )}
       </div>
