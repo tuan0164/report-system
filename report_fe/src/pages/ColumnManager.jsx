@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   listColumns, getAuditLog, dropColumn,
 } from "../api/columns";
@@ -169,6 +169,8 @@ function ColumnsTab() {
   const [dragCol, setDragCol] = useState(null);      // cột đang kéo
   const [dragOverCol, setDragOverCol] = useState(null); // cột đang được kéo qua
   const [optionsTarget, setOptionsTarget] = useState(null); // cột array đang mở modal tùy chọn
+  const [addPanelOpen, setAddPanelOpen] = useState(false);   // panel "thêm cột động" xổ xuống
+  const addPanelRef = useRef(null);
 
   const fetchAll = useCallback(() => {
     listColumns()
@@ -195,6 +197,21 @@ function ColumnsTab() {
       .catch(() => { /* ignored */ });
   }, []);
 
+  // Panel "thêm cột động": đóng bằng Esc hoặc click ra ngoài.
+  useEffect(() => {
+    if (!addPanelOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setAddPanelOpen(false); };
+    const onClick = (e) => {
+      if (addPanelRef.current && !addPanelRef.current.contains(e.target)) setAddPanelOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [addPanelOpen]);
+
   const clearMessages = () => { setError(""); setSuccess(""); };
 
   const getDefForCol = (name) => dynamicDefs.find((d) => d.name === name);
@@ -217,6 +234,7 @@ function ColumnsTab() {
       });
       setSuccess(`Đã thêm cột "${form.label}"`);
       setForm(emptyColForm);
+      setAddPanelOpen(false);
       fetchAll();
     } catch (err) {
       setError(getErrDetail(err, "Thêm cột thất bại"));
@@ -402,10 +420,21 @@ function ColumnsTab() {
         </div>
       )}
 
-      <div className="card cm-add-card">
-        <div className="cm-form-title">Thêm cột động mới</div>
-        <form onSubmit={handleAddColumn}>
-          <div className="cm-form-row">
+      <div className="cm-toolbar">
+        <div className="cm-add-selector" ref={addPanelRef}>
+          <button
+            className={`btn btn-outline btn-sm cm-add-btn${addPanelOpen ? " active" : ""}`}
+            onClick={() => setAddPanelOpen((o) => !o)}
+          >
+            <span className="cm-add-btn-icon">＋</span>
+            Thêm cột động mới
+            <span className="cm-add-caret">{addPanelOpen ? "▲" : "▼"}</span>
+          </button>
+          {addPanelOpen && (
+          <div className="cm-add-panel">
+            <div className="cm-form-title">Thêm cột động mới</div>
+            <form onSubmit={handleAddColumn}>
+              <div className="cm-form-row">
             <div className="form-group" style={{ margin: 0 }}>
               <input type="text" className="form-input" placeholder="Tên cột DB (VD: customer_name)"
                 value={form.name}
@@ -436,8 +465,11 @@ function ColumnsTab() {
             <div className="cm-form-actions">
               <button type="submit" className="btn btn-success btn-sm">Thêm</button>
             </div>
+              </div>
+            </form>
           </div>
-        </form>
+          )}
+        </div>
       </div>
 
       <div className="card cm-table-card">

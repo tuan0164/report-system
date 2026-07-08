@@ -32,9 +32,49 @@
   flex-shrink: 0;
 }
 
-.cm-add-card {
+.cm-toolbar {
+  display: flex;
+  justify-content: flex-start;
   margin-bottom: 1rem;
   animation: fadeIn 0.3s ease forwards;
+}
+
+.cm-add-selector {
+  position: relative;
+  display: inline-block;
+}
+
+.cm-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cm-add-btn.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.cm-add-btn-icon {
+  font-size: 1.05em;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.cm-add-caret {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+
+.cm-add-panel {
+  margin-top: 0.5rem;
+  min-width: 720px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 1rem;
+  animation: fadeIn 0.15s ease forwards;
 }
 
 .cm-form-title {
@@ -72,18 +112,18 @@
 }
 
 .cm-table thead {
-  background: var(--gray-50);
+  background: var(--brand-gradient-soft);
 }
 
 .cm-table th {
   text-align: left;
   padding: 0.75rem 1rem;
-  font-weight: 600;
-  color: var(--gray-600);
+  font-weight: 700;
+  color: var(--brand-navy);
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2px solid var(--color-primary-border);
 }
 
 .cm-table td {
@@ -342,6 +382,10 @@
 }
 
 @media (max-width: 768px) {
+  .cm-add-panel {
+    min-width: min(88vw, 720px);
+  }
+
   .cm-form-row {
     grid-template-columns: 1fr 1fr;
   }

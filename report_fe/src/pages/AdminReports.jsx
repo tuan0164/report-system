@@ -60,11 +60,11 @@ export default function AdminReports() {
   const [loading, setLoading] = useState(true);
   const [dynamicColumns, setDynamicColumns] = useState([]);
   const [visibleColumns, setVisibleColumns] = useState(() => new Set(ALWAYS_VISIBLE));
-  const [columnPanelOpen, setColumnPanelOpen] = useState(false);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
 
   const scrollRef = useRef(null);
   const barRef = useRef(null);
-  const columnPanelRef = useRef(null);
+  const filterPanelRef = useRef(null);
   const [tableWidth, setTableWidth] = useState(0);
 
   const syncFromScroll = () => {
@@ -114,33 +114,20 @@ export default function AdminReports() {
       .finally(() => setLoading(false));
   }, [applyReports]);
 
-  const handleToggleColumn = (key) => {
-    setVisibleColumns((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const handleSelectAll = () => {
-    setVisibleColumns(new Set([
-      ...STATIC_COLUMNS.map((c) => c.key),
-      ...dynamicColumns.map((c) => c.name),
-    ]));
-  };
-
-  const handleDeselectAll = () => {
-    setVisibleColumns(new Set(ALWAYS_VISIBLE));
-  };
-
-  // Panel inline (đẩy nội dung xuống) → chỉ đóng bằng Esc hoặc bấm lại nút.
+  // Panel lọc: đóng bằng Esc hoặc click ra ngoài.
   useEffect(() => {
-    if (!columnPanelOpen) return;
-    const onKey = (e) => { if (e.key === "Escape") setColumnPanelOpen(false); };
+    if (!filterPanelOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setFilterPanelOpen(false); };
+    const onClick = (e) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target)) setFilterPanelOpen(false);
+    };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [columnPanelOpen]);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [filterPanelOpen]);
 
   const getDynamicLabel = (key) => {
     const d = dynamicColumns.find((c) => c.name === key);
@@ -156,17 +143,23 @@ export default function AdminReports() {
     return String(value);
   };
 
-  // "full_name - mã NV"; thiếu cái nào bỏ cái đó, không để dấu "-" thừa.
-  const employeeLabel = (r) => [r.full_name, r.employee_code].filter(Boolean).join(" - ");
+  // Ngày YYYY-MM-DD -> DD/MM/YYYY.
+  const formatDate = (value) => {
+    if (value === null || value === undefined) return "—";
+    const m = String(value).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : formatValue(value);
+  };
+
+  // Cột "Nhân viên": tên (đậm) / "Mã NV : xxx" (thường) / email (nhạt).
+  const employeeCodeLabel = (r) => (r.employee_code ? `Mã NV : ${r.employee_code}` : "");
 
   const allColumnKeys = [
     ...STATIC_COLUMNS.map((c) => c.key),
     ...dynamicColumns.map((c) => c.name),
   ];
 
-  const totalColumns = allColumnKeys.length;
   const visibleKeys = allColumnKeys.filter((k) => visibleColumns.has(k));
-  const selectedCount = visibleKeys.length;
+  const activeFilterCount = (filterEmail ? 1 : 0) + (filterDate ? 1 : 0);
 
   // Danh sách "đơn vị cột" để render: cột đơn hoặc cặp gộp (khi cả 2 thành viên cùng hiện).
   const renderUnits = (() => {
@@ -207,97 +200,54 @@ export default function AdminReports() {
       </div>
 
       <div className="ar-toolbar">
-        <div className="ar-column-selector" ref={columnPanelRef}>
+        <div className="ar-filter-selector" ref={filterPanelRef}>
           <button
-            className={`btn btn-outline btn-sm ar-column-btn${columnPanelOpen ? " active" : ""}`}
-            onClick={() => setColumnPanelOpen((o) => !o)}
+            className={`btn btn-outline btn-sm ar-filter-btn${filterPanelOpen ? " active" : ""}`}
+            onClick={() => setFilterPanelOpen((o) => !o)}
           >
-            <span className="ar-column-btn-icon">⚙</span>
-            Hiển thị cột
-            <span className="ar-column-count">{selectedCount}/{totalColumns}</span>
-            <span className="ar-column-caret">{columnPanelOpen ? "▲" : "▼"}</span>
+            <span className="ar-filter-btn-icon">⚲</span>
+            Lọc
+            {activeFilterCount > 0 && <span className="ar-filter-count">{activeFilterCount}</span>}
+            <span className="ar-filter-caret">{filterPanelOpen ? "▲" : "▼"}</span>
           </button>
-          {columnPanelOpen && (
-            <div className="ar-column-panel">
-              <div className="ar-column-selector-header">
-                <span className="ar-column-selector-title">Chọn cột hiển thị</span>
-                <div className="ar-column-selector-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={handleSelectAll}>
-                    Chọn tất cả
+          {filterPanelOpen && (
+            <div className="ar-filter-panel">
+              <div className="admin-reports-filter-grid">
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Nhân viên</label>
+                  <select
+                    value={filterEmail}
+                    onChange={(e) => setFilterEmail(e.target.value)}
+                    className="form-select"
+                  >
+                    <option value="">Tất cả</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.email}>
+                        {u.full_name} ({u.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Ngày</label>
+                  <input
+                    type="date"
+                    value={filterDate}
+                    onChange={(e) => setFilterDate(e.target.value)}
+                    className="form-input"
+                  />
+                </div>
+                <div className="admin-reports-filter-actions">
+                  <button className="btn btn-primary btn-sm" onClick={() => { fetchReports(filterEmail, filterDate); setFilterPanelOpen(false); }}>
+                    Lọc
                   </button>
-                  <button className="btn btn-ghost btn-sm" onClick={handleDeselectAll}>
-                    Bỏ tất cả
+                  <button className="btn btn-outline btn-sm" onClick={() => { setFilterEmail(""); setFilterDate(""); fetchReports("", ""); }}>
+                    Bỏ lọc
                   </button>
                 </div>
               </div>
-              <div className="ar-column-grid">
-                {STATIC_COLUMNS.map((col) => (
-                  <label key={col.key} className={`ar-column-checkbox${visibleColumns.has(col.key) ? " checked" : ""}`}>
-                    <input
-                      type="checkbox"
-                      checked={visibleColumns.has(col.key)}
-                      onChange={() => handleToggleColumn(col.key)}
-                    />
-                    {col.label}
-                  </label>
-                ))}
-              </div>
-              {dynamicColumns.length > 0 && (
-                <>
-                  <div className="ar-column-section-title">Cột động</div>
-                  <div className="ar-column-grid">
-                    {dynamicColumns.map((col) => (
-                      <label key={col.name} className={`ar-column-checkbox${visibleColumns.has(col.name) ? " checked" : ""}`}>
-                        <input
-                          type="checkbox"
-                          checked={visibleColumns.has(col.name)}
-                          onChange={() => handleToggleColumn(col.name)}
-                        />
-                        {col.label}
-                      </label>
-                    ))}
-                  </div>
-                </>
-              )}
             </div>
           )}
-        </div>
-      </div>
-
-      <div className="card admin-reports-filter">
-        <div className="admin-reports-filter-grid">
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Nhân viên</label>
-            <select
-              value={filterEmail}
-              onChange={(e) => setFilterEmail(e.target.value)}
-              className="form-select"
-            >
-              <option value="">Tất cả</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.email}>
-                  {u.full_name} ({u.email})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Ngày</label>
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="form-input"
-            />
-          </div>
-          <div className="admin-reports-filter-actions">
-            <button className="btn btn-primary btn-sm" onClick={() => fetchReports(filterEmail, filterDate)}>
-              Lọc
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={() => { setFilterEmail(""); setFilterDate(""); fetchReports("", ""); }}>
-              Bỏ lọc
-            </button>
-          </div>
         </div>
       </div>
 
@@ -343,9 +293,12 @@ export default function AdminReports() {
                         <td key={u.key} className={colClass(u.key)}>
                           {u.key === "email" ? (
                             <div className="ar-email-cell">
-                              {employeeLabel(r) ? <span className="ar-email">{employeeLabel(r)}</span> : null}
-                              <span className="ar-fullname">{formatValue(r.email)}</span>
+                              {r.full_name ? <span className="ar-emp-name">{r.full_name}</span> : null}
+                              {employeeCodeLabel(r) ? <span className="ar-emp-code">{employeeCodeLabel(r)}</span> : null}
+                              <span className="ar-emp-mail">{formatValue(r.email)}</span>
                             </div>
+                          ) : u.key === "report_date" ? (
+                            formatDate(r[u.key])
                           ) : (
                             formatValue(r[u.key])
                           )}

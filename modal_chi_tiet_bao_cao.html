@@ -1,0 +1,64 @@
+<div style="min-height: 560px; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 1rem;">
+<div style="width: 100%; max-width: 560px; max-height: 620px; overflow-y: auto; background: var(--surface-2); border-radius: 12px; border: 0.5px solid var(--border);">
+
+<div style="display:flex; align-items:center; justify-content:space-between; padding: 1rem 1.25rem; border-bottom: 0.5px solid var(--border); position:sticky; top:0; background:var(--surface-2);">
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div style="width:40px; height:40px; border-radius:50%; background:var(--bg-accent); display:flex; align-items:center; justify-content:center; font-weight:500; font-size:13px; color:var(--text-accent);">VT</div>
+    <div>
+      <p style="font-weight:500; font-size:15px; margin:0;">Bùi Văn Tuấn</p>
+      <p style="font-size:13px; color:var(--text-secondary); margin:0;"><i class="ti ti-calendar-event" style="font-size:14px; vertical-align:-2px; margin-right:4px" aria-hidden="true"></i>Thứ ba, 08/07/2026</p>
+    </div>
+  </div>
+  <button aria-label="Đóng" style="width:32px; height:32px; padding:0; border-radius:50%;"><i class="ti ti-x" style="font-size:18px;" aria-hidden="true"></i></button>
+</div>
+
+<div style="padding: 1.25rem;">
+
+  <div style="display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; margin-bottom:1.25rem;">
+    <div style="background:var(--surface-1); border-radius:var(--radius); padding:0.75rem;">
+      <p style="font-size:12px; color:var(--text-secondary); margin:0 0 4px;">Dự kiến</p>
+      <p style="font-size:18px; font-weight:500; margin:0;">8.0h</p>
+    </div>
+    <div style="background:var(--surface-1); border-radius:var(--radius); padding:0.75rem;">
+      <p style="font-size:12px; color:var(--text-secondary); margin:0 0 4px;">Thực tế</p>
+      <p style="font-size:18px; font-weight:500; margin:0; color:var(--text-success);">8.5h</p>
+    </div>
+    <div style="background:var(--surface-1); border-radius:var(--radius); padding:0.75rem;">
+      <p style="font-size:12px; color:var(--text-secondary); margin:0 0 4px;">Thời gian</p>
+      <p style="font-size:14px; font-weight:500; margin:0;">08:30–17:00</p>
+    </div>
+  </div>
+
+  <div style="margin-bottom:1.25rem;">
+    <p style="font-size:13px; font-weight:500; color:var(--text-secondary); margin:0 0 6px; display:flex; align-items:center; gap:6px;"><i class="ti ti-briefcase" style="font-size:16px;" aria-hidden="true"></i>Tóm tắt công việc</p>
+    <p style="font-size:14px; margin:0; line-height:1.6;">Hoàn thành module xử lý thanh toán, review code cho tính năng đăng nhập Google OAuth, hỗ trợ debug lỗi timeout API.</p>
+  </div>
+
+  <div style="margin-bottom:1.25rem; background:var(--bg-warning); border-radius:var(--radius); padding:0.875rem;">
+    <p style="font-size:13px; font-weight:500; color:var(--text-warning); margin:0 0 6px; display:flex; align-items:center; gap:6px;"><i class="ti ti-alert-triangle" style="font-size:16px;" aria-hidden="true"></i>Khó khăn gặp phải</p>
+    <p style="font-size:14px; margin:0; line-height:1.6; color:var(--text-primary);">API bên thứ 3 phản hồi chậm vào giờ cao điểm, ảnh hưởng đến thời gian test tính năng thanh toán.</p>
+  </div>
+
+  <div style="margin-bottom:1.25rem;">
+    <p style="font-size:13px; font-weight:500; color:var(--text-secondary); margin:0 0 6px; display:flex; align-items:center; gap:6px;"><i class="ti ti-file-text" style="font-size:16px;" aria-hidden="true"></i>Nội dung chi tiết</p>
+    <p style="font-size:14px; margin:0; line-height:1.6;">Viết unit test cho payment service, cấu hình lại retry logic khi gọi API bên thứ 3, cập nhật tài liệu kỹ thuật cho module OAuth.</p>
+  </div>
+
+  <div style="margin-bottom:1.25rem;">
+    <p style="font-size:13px; font-weight:500; color:var(--text-secondary); margin:0 0 6px; display:flex; align-items:center; gap:6px;"><i class="ti ti-bulb" style="font-size:16px;" aria-hidden="true"></i>Đề xuất giải pháp</p>
+    <p style="font-size:14px; margin:0; line-height:1.6;">Nên thêm cơ chế cache cho API bên thứ 3 để giảm phụ thuộc vào tốc độ phản hồi trong giờ cao điểm.</p>
+  </div>
+
+  <div style="background:var(--surface-1); border-radius:var(--radius); padding:0.875rem;">
+    <p style="font-size:13px; font-weight:500; color:var(--text-secondary); margin:0 0 6px; display:flex; align-items:center; gap:6px;"><i class="ti ti-arrow-right" style="font-size:16px;" aria-hidden="true"></i>Kế hoạch ngày mai</p>
+    <p style="font-size:14px; margin:0; line-height:1.6;">Triển khai cơ chế cache cho API thanh toán, bắt đầu tích hợp module thông báo qua email.</p>
+  </div>
+
+</div>
+
+<div style="display:flex; justify-content:flex-end; gap:8px; padding: 1rem 1.25rem; border-top: 0.5px solid var(--border);">
+  <button>Đóng</button>
+</div>
+
+</div>
+</div>

@@ -59,7 +59,8 @@
       "Bash(kill 84613)",
       "Bash(DATABASE_URL=\"postgresql://webapp:123456@localhost:5434/report\" PYTHONPATH=. .venv/bin/python /tmp/claude-1000/-home-tuan-HDC-work-report-webapp/c29afaaf-0d8e-4119-b1cb-dd977d8ca524/scratchpad/t.py)",
       "Bash(kill 202676)",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(echo \"EXIT $?\")"
     ]
   }
 }
