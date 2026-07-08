@@ -4,52 +4,67 @@ import { getDynamicColumns } from "../api/dynamicColumns";
 import "./AdminReports.css";
 
 // Chỉ còn trường lõi. Trường nghiệp vụ đã thành cột động (lấy từ API, sort theo field_order).
+// Cột "email" giờ là cột định danh NV: trên là "full_name - mã NV", dưới là email in nhạt.
+// full_name + employee_code không còn cột riêng — đã gộp vào cột này.
 const STATIC_COLUMNS = [
   { key: "id", label: "#", default: true },
-  { key: "email", label: "Email", default: true },
+  { key: "email", label: "Nhân viên", default: true },
   { key: "report_date", label: "Ngày", default: true },
-  { key: "employee_code", label: "Mã NV", default: true },
-  { key: "full_name", label: "Họ tên", default: true },
   { key: "project", label: "Dự án", default: true },
 ];
 
-const STORAGE_KEY = "admin_reports_columns";
+// Cột luôn hiện dù rỗng (để bảng không trống trơn).
+const ALWAYS_VISIBLE = ["id", "email"];
 
-function loadSavedColumns() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return new Set(JSON.parse(saved));
-  } catch {
-    /* ignore parse errors */
-  }
-  return null;
+// Cặp cột gộp: 2 giá trị xếp trên/dưới trong 1 ô. Chỉ gộp khi CẢ 2 cùng hiện;
+// nếu chỉ 1 cột bật thì render như cột đơn bình thường.
+const MERGE_GROUPS = [
+  { members: ["start_time", "end_time"] },
+  { members: ["planned_work_time", "actual_hours"] },
+];
+
+// Cột số/giờ → mono, canh phải (không bóp width theo dữ liệu nữa).
+const NUMERIC_COLUMNS = new Set(["planned_work_time", "actual_hours", "start_time", "end_time"]);
+
+// Cột text dài → cho xuống dòng, hiện đủ, giới hạn bề rộng.
+const TEXT_COLUMNS = new Set(["work_summary", "work_detail", "difficulty", "proposal", "tomorrow_plan"]);
+
+// Ngày hôm nay theo local, dạng YYYY-MM-DD.
+function todayStr() {
+  const d = new Date();
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d - tz).toISOString().slice(0, 10);
 }
 
-function saveColumns(columns) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([...columns]));
+function hasData(v) {
+  if (v === null || v === undefined || v === "") return false;
+  if (Array.isArray(v)) return v.length > 0;
+  return true;
 }
 
-function buildInitialVisible(saved, hiddenDefs) {
-  if (saved) return saved;
-  const defaults = new Set(STATIC_COLUMNS.filter((c) => c.default).map((c) => c.key));
-  hiddenDefs.forEach((name) => defaults.delete(name));
-  return defaults;
+// PA A: tính cột hiển thị từ dữ liệu — cột nào có ít nhất 1 dòng có data thì hiện.
+function computeVisibleFromData(reports, dynamicColumns) {
+  const keys = [...STATIC_COLUMNS.map((c) => c.key), ...dynamicColumns.map((c) => c.name)];
+  const visible = new Set(ALWAYS_VISIBLE);
+  keys.forEach((k) => {
+    if (reports.some((r) => hasData(r[k]))) visible.add(k);
+  });
+  return visible;
 }
 
 export default function AdminReports() {
   const [reports, setReports] = useState([]);
   const [users, setUsers] = useState([]);
   const [filterEmail, setFilterEmail] = useState("");
-  const [filterDate, setFilterDate] = useState("");
+  const [filterDate, setFilterDate] = useState(todayStr());
   const [loading, setLoading] = useState(true);
   const [dynamicColumns, setDynamicColumns] = useState([]);
-  const [, setHiddenDefs] = useState([]);
-  const [visibleColumns, setVisibleColumns] = useState(() => {
-    return buildInitialVisible(loadSavedColumns(), []);
-  });
+  const [visibleColumns, setVisibleColumns] = useState(() => new Set(ALWAYS_VISIBLE));
+  const [columnPanelOpen, setColumnPanelOpen] = useState(false);
 
   const scrollRef = useRef(null);
   const barRef = useRef(null);
+  const columnPanelRef = useRef(null);
   const [tableWidth, setTableWidth] = useState(0);
 
   const syncFromScroll = () => {
@@ -59,61 +74,73 @@ export default function AdminReports() {
     if (scrollRef.current && barRef.current) scrollRef.current.scrollLeft = barRef.current.scrollLeft;
   };
 
+  // Giữ dữ liệu mới nhất để tính lại cột khi reports hoặc cột động đổi (tránh setState đồng bộ trong effect).
+  const reportsRef = useRef([]);
+  const dynColsRef = useRef([]);
+
+  // PA A: gán reports + tự tính cột hiển thị theo data, đè lựa chọn cũ.
+  const applyReports = useCallback((data) => {
+    reportsRef.current = data;
+    setReports(data);
+    setVisibleColumns(computeVisibleFromData(data, dynColsRef.current));
+  }, []);
+
   const fetchReports = useCallback((email, date) => {
     setLoading(true);
     const params = {};
     if (email) params.email = email;
     if (date) params.report_date = date;
     getAllReports(params)
-      .then((res) => setReports(res.data))
-      .catch(() => setReports([]))
+      .then((res) => applyReports(res.data))
+      .catch(() => applyReports([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [applyReports]);
 
   useEffect(() => {
     getUsers().then((res) => setUsers(res.data)).catch(() => { /* ignored */ });
     getDynamicColumns()
-      .then((res) => setDynamicColumns([...res.data].sort((a, b) => a.field_order - b.field_order)))
-      .catch(() => { /* ignored */ });
-    getDynamicColumns(true)
       .then((res) => {
-        const hidden = res.data.filter((d) => !d.is_active).map((d) => d.name);
-        setHiddenDefs(hidden);
-        if (!loadSavedColumns()) {
-          setVisibleColumns(buildInitialVisible(null, hidden));
-        }
+        const sorted = [...res.data].sort((a, b) => a.field_order - b.field_order);
+        dynColsRef.current = sorted;
+        setDynamicColumns(sorted);
+        // Cột động có thể về sau reports → tính lại cột hiển thị theo reports hiện có.
+        setVisibleColumns(computeVisibleFromData(reportsRef.current, sorted));
       })
       .catch(() => { /* ignored */ });
-    getAllReports({})
-      .then((res) => setReports(res.data))
-      .catch(() => setReports([]))
+    // Mặc định: chỉ load báo cáo hôm nay (loading đã true sẵn nên không setState đồng bộ ở đây).
+    getAllReports({ report_date: todayStr() })
+      .then((res) => applyReports(res.data))
+      .catch(() => applyReports([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [applyReports]);
 
   const handleToggleColumn = (key) => {
     setVisibleColumns((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      saveColumns(next);
       return next;
     });
   };
 
   const handleSelectAll = () => {
-    const all = new Set([
+    setVisibleColumns(new Set([
       ...STATIC_COLUMNS.map((c) => c.key),
       ...dynamicColumns.map((c) => c.name),
-    ]);
-    setVisibleColumns(all);
-    saveColumns(all);
+    ]));
   };
 
   const handleDeselectAll = () => {
-    const minimal = new Set(["id", "email", "full_name"]);
-    setVisibleColumns(minimal);
-    saveColumns(minimal);
+    setVisibleColumns(new Set(ALWAYS_VISIBLE));
   };
+
+  // Panel inline (đẩy nội dung xuống) → chỉ đóng bằng Esc hoặc bấm lại nút.
+  useEffect(() => {
+    if (!columnPanelOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") setColumnPanelOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [columnPanelOpen]);
 
   const getDynamicLabel = (key) => {
     const d = dynamicColumns.find((c) => c.name === key);
@@ -129,10 +156,44 @@ export default function AdminReports() {
     return String(value);
   };
 
+  // "full_name - mã NV"; thiếu cái nào bỏ cái đó, không để dấu "-" thừa.
+  const employeeLabel = (r) => [r.full_name, r.employee_code].filter(Boolean).join(" - ");
+
   const allColumnKeys = [
     ...STATIC_COLUMNS.map((c) => c.key),
     ...dynamicColumns.map((c) => c.name),
   ];
+
+  const totalColumns = allColumnKeys.length;
+  const visibleKeys = allColumnKeys.filter((k) => visibleColumns.has(k));
+  const selectedCount = visibleKeys.length;
+
+  // Danh sách "đơn vị cột" để render: cột đơn hoặc cặp gộp (khi cả 2 thành viên cùng hiện).
+  const renderUnits = (() => {
+    const units = [];
+    const consumed = new Set();
+    for (const k of visibleKeys) {
+      if (consumed.has(k)) continue;
+      const group = MERGE_GROUPS.find((g) => g.members.includes(k));
+      if (group && group.members.every((m) => visibleColumns.has(m))) {
+        units.push({ type: "merged", group });
+        group.members.forEach((m) => consumed.add(m));
+      } else {
+        units.push({ type: "single", key: k });
+      }
+    }
+    return units;
+  })();
+
+  const colClass = (k) =>
+    (k === "id" ? "col-id" : "") +
+    (k === "email" ? " col-email" : "") +
+    (TEXT_COLUMNS.has(k) ? " col-text" : "") +
+    (isDynamic(k) ? " col-dynamic" : "") +
+    (NUMERIC_COLUMNS.has(k) ? " col-num" : "");
+
+  const singleLabel = (k) =>
+    isDynamic(k) ? getDynamicLabel(k) : STATIC_COLUMNS.find((c) => c.key === k)?.label || k;
 
   useLayoutEffect(() => {
     const table = scrollRef.current?.querySelector("table");
@@ -145,47 +206,62 @@ export default function AdminReports() {
         <h1 className="admin-reports-title">Báo cáo tất cả nhân viên</h1>
       </div>
 
-      <div className="card ar-column-selector">
-        <div className="ar-column-selector-header">
-          <span className="ar-column-selector-title">Hiển thị cột</span>
-          <div className="ar-column-selector-actions">
-            <button className="btn btn-ghost btn-sm" onClick={handleSelectAll}>
-              Chọn tất cả
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={handleDeselectAll}>
-              Bỏ tất cả
-            </button>
-          </div>
-        </div>
-        <div className="ar-column-grid">
-          {STATIC_COLUMNS.map((col) => (
-            <label key={col.key} className={`ar-column-checkbox${visibleColumns.has(col.key) ? " checked" : ""}`}>
-              <input
-                type="checkbox"
-                checked={visibleColumns.has(col.key)}
-                onChange={() => handleToggleColumn(col.key)}
-              />
-              {col.label}
-            </label>
-          ))}
-        </div>
-        {dynamicColumns.length > 0 && (
-          <>
-            <div className="ar-column-section-title">Cột động</div>
-            <div className="ar-column-grid">
-              {dynamicColumns.map((col) => (
-                <label key={col.name} className={`ar-column-checkbox${visibleColumns.has(col.name) ? " checked" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={visibleColumns.has(col.name)}
-                    onChange={() => handleToggleColumn(col.name)}
-                  />
-                  {col.label}
-                </label>
-              ))}
+      <div className="ar-toolbar">
+        <div className="ar-column-selector" ref={columnPanelRef}>
+          <button
+            className={`btn btn-outline btn-sm ar-column-btn${columnPanelOpen ? " active" : ""}`}
+            onClick={() => setColumnPanelOpen((o) => !o)}
+          >
+            <span className="ar-column-btn-icon">⚙</span>
+            Hiển thị cột
+            <span className="ar-column-count">{selectedCount}/{totalColumns}</span>
+            <span className="ar-column-caret">{columnPanelOpen ? "▲" : "▼"}</span>
+          </button>
+          {columnPanelOpen && (
+            <div className="ar-column-panel">
+              <div className="ar-column-selector-header">
+                <span className="ar-column-selector-title">Chọn cột hiển thị</span>
+                <div className="ar-column-selector-actions">
+                  <button className="btn btn-ghost btn-sm" onClick={handleSelectAll}>
+                    Chọn tất cả
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={handleDeselectAll}>
+                    Bỏ tất cả
+                  </button>
+                </div>
+              </div>
+              <div className="ar-column-grid">
+                {STATIC_COLUMNS.map((col) => (
+                  <label key={col.key} className={`ar-column-checkbox${visibleColumns.has(col.key) ? " checked" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns.has(col.key)}
+                      onChange={() => handleToggleColumn(col.key)}
+                    />
+                    {col.label}
+                  </label>
+                ))}
+              </div>
+              {dynamicColumns.length > 0 && (
+                <>
+                  <div className="ar-column-section-title">Cột động</div>
+                  <div className="ar-column-grid">
+                    {dynamicColumns.map((col) => (
+                      <label key={col.name} className={`ar-column-checkbox${visibleColumns.has(col.name) ? " checked" : ""}`}>
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns.has(col.name)}
+                          onChange={() => handleToggleColumn(col.name)}
+                        />
+                        {col.label}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="card admin-reports-filter">
@@ -236,39 +312,51 @@ export default function AdminReports() {
             <table className="admin-reports-table">
               <thead>
                 <tr>
-                  {allColumnKeys
-                    .filter((k) => visibleColumns.has(k))
-                    .map((k) => (
-                      <th key={k} className={isDynamic(k) ? "col-dynamic" : ""}>
-                        {isDynamic(k) ? getDynamicLabel(k) : STATIC_COLUMNS.find((c) => c.key === k)?.label || k}
+                  {renderUnits.map((u) =>
+                    u.type === "merged" ? (
+                      <th key={u.group.members.join("+")} className="col-dynamic col-stacked">
+                        <div className="ar-stack">
+                          <span>{getDynamicLabel(u.group.members[0])}</span>
+                          <span>{getDynamicLabel(u.group.members[1])}</span>
+                        </div>
                       </th>
-                    ))}
+                    ) : (
+                      <th key={u.key} className={colClass(u.key)}>
+                        {singleLabel(u.key)}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {reports.map((r) => (
                   <tr key={r.id}>
-                    {allColumnKeys
-                      .filter((k) => visibleColumns.has(k))
-                      .map((k) => (
-                        <td
-                          key={k}
-                          className={
-                            (k === "id" ? "col-id" : "") +
-                            (k === "work_summary" || k === "work_detail" || k === "difficulty" || k === "proposal" || k === "tomorrow_plan"
-                              ? " col-text"
-                              : "") +
-                            (isDynamic(k) ? " col-dynamic" : "")
-                          }
-                        >
-                          {formatValue(r[k])}
+                    {renderUnits.map((u) =>
+                      u.type === "merged" ? (
+                        <td key={u.group.members.join("+")} className="col-dynamic col-stacked">
+                          <div className="ar-stack">
+                            <span>{formatValue(r[u.group.members[0]])}</span>
+                            <span>{formatValue(r[u.group.members[1]])}</span>
+                          </div>
                         </td>
-                      ))}
+                      ) : (
+                        <td key={u.key} className={colClass(u.key)}>
+                          {u.key === "email" ? (
+                            <div className="ar-email-cell">
+                              {employeeLabel(r) ? <span className="ar-email">{employeeLabel(r)}</span> : null}
+                              <span className="ar-fullname">{formatValue(r.email)}</span>
+                            </div>
+                          ) : (
+                            formatValue(r[u.key])
+                          )}
+                        </td>
+                      )
+                    )}
                   </tr>
                 ))}
                 {reports.length === 0 && (
                   <tr>
-                    <td colSpan={allColumnKeys.filter((k) => visibleColumns.has(k)).length || 1}>
+                    <td colSpan={renderUnits.length || 1}>
                       <div className="empty-state">
                         <span className="empty-state-icon">📋</span>
                         <p className="empty-state-text">Không có báo cáo nào</p>

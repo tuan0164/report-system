@@ -40,9 +40,9 @@ export default function ReportCalendar({ reports = [] }) {
       const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const isToday = isCurrent && d === today;
       let status;
-      if (dow === 0 || dow === 6) status = "weekend";
-      else if (isCurrent && d > today) status = "future";
+      if (isCurrent && d > today) status = "future";
       else if (submitted.has(iso)) { status = "submitted"; done++; }
+      else if (dow === 0 || dow === 6) status = "weekend";
       else { status = "missing"; miss++; }
       cells.push({ day: d, status, isToday, key: iso });
     }

@@ -149,7 +149,7 @@ export default function Dashboard() {
                     <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
                   </svg>
                 </div>
-                <h3 className="dashboard-card-title">Quản lý bảng </h3>
+                <h3 className="dashboard-card-title">Quản lý trường </h3>
                 <p className="dashboard-card-desc">Thêm, sửa, xóa cột báo cáo</p>
               </div>
 
