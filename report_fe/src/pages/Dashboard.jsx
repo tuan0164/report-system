@@ -34,6 +34,23 @@ const avatarTone = (s) => {
   return AVATAR_TONES[sum % AVATAR_TONES.length];
 };
 
+// Meta cho panel danh sách nhân viên theo từng thẻ số liệu.
+const PANEL_META = {
+  submitted: { title: "Nhân viên đã nộp hôm nay" },
+  not_submitted: { title: "Nhân viên chưa nộp" },
+  all: { title: "Tổng nhân viên" },
+};
+const PANEL_IC_CLASS = {
+  submitted: "admin-panel-ic--done",
+  not_submitted: "admin-panel-ic--warn",
+  all: "admin-panel-ic--brand",
+};
+const PANEL_COUNT_CLASS = {
+  submitted: "admin-count--done",
+  not_submitted: "admin-count--warn",
+  all: "",
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -41,6 +58,10 @@ export default function Dashboard() {
   const [users, setUsers] = useState([]); // admin: toàn user
   const [allReports, setAllReports] = useState([]); // admin: toàn report
   const [monthOffset, setMonthOffset] = useState(0); // 0 = tháng hiện tại
+
+  // Panel danh sách nhân viên dưới 3 thẻ. Mặc định "chưa nộp".
+  const [panelKind, setPanelKind] = useState("not_submitted"); // submitted | not_submitted | all
+  const [panelLoading, setPanelLoading] = useState(false);
 
   useEffect(() => {
     api
@@ -161,6 +182,65 @@ export default function Dashboard() {
     return { total: employees.length, doneCount, notSubmitted: notSubmittedNamed, projects };
   }, [users, allReports]);
 
+  // Chọn thẻ: fetch mới toàn user + toàn report ngay lúc click (không dùng cache cũ).
+  const openPanel = (kind) => {
+    setPanelKind(kind);
+    setPanelLoading(true);
+    Promise.all([getUsers(), getAllReports()])
+      .then(([u, r]) => {
+        setUsers(Array.isArray(u.data) ? u.data : []);
+        setAllReports(Array.isArray(r.data) ? r.data : []);
+      })
+      .catch(() => {})
+      .finally(() => setPanelLoading(false));
+  };
+  const cardKey = (kind) => (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openPanel(kind);
+    }
+  };
+
+  // Danh sách nhân viên cho panel — tính từ users + allReports theo thẻ đang chọn.
+  const panelList = useMemo(() => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+    const employees = users.filter((u) => u.is_active && u.role !== "ADMIN");
+    const submittedEmails = new Set(
+      allReports
+        .filter((r) => r.report_date && String(r.report_date).slice(0, 10) === todayStr)
+        .map((r) => r.email)
+    );
+
+    // Báo cáo gần nhất mỗi người (đã sort id DESC ở BE) — lấy tên/mã/dự án.
+    const seen = new Set();
+    const nameByEmail = new Map();
+    const codeByEmail = new Map();
+    const projByEmail = new Map();
+    for (const r of allReports) {
+      if (seen.has(r.email)) continue;
+      seen.add(r.email);
+      if (r.full_name) nameByEmail.set(r.email, r.full_name);
+      if (r.employee_code) codeByEmail.set(r.email, r.employee_code);
+      projByEmail.set(r.email, Array.isArray(r.project) ? r.project.filter(Boolean) : []);
+    }
+
+    const rows = employees.map((u) => ({
+      id: u.id,
+      email: u.email,
+      displayName: nameByEmail.get(u.email) || u.full_name || u.email,
+      code: codeByEmail.get(u.email) || u.employee_code || "",
+      submitted: submittedEmails.has(u.email),
+      projects: projByEmail.get(u.email) || [],
+    }));
+
+    let filtered = rows;
+    if (panelKind === "submitted") filtered = rows.filter((r) => r.submitted);
+    else if (panelKind === "not_submitted") filtered = rows.filter((r) => !r.submitted);
+    return filtered.sort((a, b) => a.displayName.localeCompare(b.displayName, "vi"));
+  }, [panelKind, users, allReports]);
+
   if (!user) {
     return (
       <div className="page-loading">
@@ -206,7 +286,14 @@ export default function Dashboard() {
 
         <div className="admin-overview">
           <div className="admin-stat-row">
-            <div className="card admin-stat admin-stat--done">
+            <div
+              className={`card admin-stat admin-stat--done admin-stat--clickable${panelKind === "submitted" ? " is-active" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-pressed={panelKind === "submitted"}
+              onClick={() => openPanel("submitted")}
+              onKeyDown={cardKey("submitted")}
+            >
               <span className="admin-stat-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
@@ -219,7 +306,14 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="card admin-stat admin-stat--miss">
+            <div
+              className={`card admin-stat admin-stat--miss admin-stat--clickable${panelKind === "not_submitted" ? " is-active" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-pressed={panelKind === "not_submitted"}
+              onClick={() => openPanel("not_submitted")}
+              onKeyDown={cardKey("not_submitted")}
+            >
               <span className="admin-stat-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />
@@ -232,7 +326,14 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="card admin-stat admin-stat--total">
+            <div
+              className={`card admin-stat admin-stat--total admin-stat--clickable${panelKind === "all" ? " is-active" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-pressed={panelKind === "all"}
+              onClick={() => openPanel("all")}
+              onKeyDown={cardKey("all")}
+            >
               <span className="admin-stat-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
@@ -248,36 +349,74 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="card admin-panel admin-panel--warn">
+          <div className={`card admin-panel admin-result-panel${panelLoading ? " is-loading" : ""}`}>
             <div className="admin-panel-head">
               <h3 className="admin-panel-title">
-                <span className="admin-panel-ic admin-panel-ic--warn">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
+                <span className={`admin-panel-ic ${PANEL_IC_CLASS[panelKind]}`}>
+                  {panelKind === "submitted" ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                  ) : panelKind === "all" ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 00-3-3.87" />
+                      <path d="M16 3.13a4 4 0 010 7.75" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                  )}
                 </span>
-                Nhân viên chưa nộp báo cáo hôm nay
+                {PANEL_META[panelKind].title}
               </h3>
-              <span className="admin-count admin-count--warn">{adminData.notSubmitted.length}</span>
+              <span className={`admin-count ${PANEL_COUNT_CLASS[panelKind]}`}>
+                {panelLoading ? "…" : panelList.length}
+              </span>
             </div>
-            {adminData.notSubmitted.length > 0 ? (
-              <div className="admin-people">
-                {adminData.notSubmitted.map((u) => {
-                  const [bg, fg] = avatarTone(u.displayName);
+
+            {panelLoading ? (
+              <div className="admin-result-loading">
+                <div className="spinner spinner-lg"></div>
+                <p>Đang tải...</p>
+              </div>
+            ) : panelList.length === 0 ? (
+              <p className="admin-empty">
+                {panelKind === "not_submitted"
+                  ? "Tất cả nhân viên đã nộp báo cáo hôm nay 🎉"
+                  : "Không có nhân viên nào"}
+              </p>
+            ) : (
+              <div className="emp-list">
+                {panelList.map((p) => {
+                  const [bg, fg] = avatarTone(p.displayName);
                   return (
-                    <div key={u.id} className="admin-person">
-                      <span className="hdc-avatar admin-person-av" style={{ background: bg, color: fg }}>
-                        {initials(u.displayName)}
+                    <div key={p.id} className="emp-row">
+                      <span className="hdc-avatar emp-row-av" style={{ background: bg, color: fg }}>
+                        {initials(p.displayName)}
                       </span>
-                      <span className="admin-person-name">{u.displayName}</span>
+                      <div className="emp-row-body">
+                        <span className="emp-row-name">{p.displayName}</span>
+                        <span className="emp-row-meta">
+                          {p.code ? `Mã NV: ${p.code}` : "Chưa có mã NV"}
+                          {p.projects.length > 0 && ` · ${p.projects.join(", ")}`}
+                        </span>
+                      </div>
+                      {panelKind === "all" && (
+                        <span className={`emp-badge emp-badge--${p.submitted ? "done" : "miss"}`}>
+                          <span className="emp-badge-dot" />
+                          {p.submitted ? "Đã nộp" : "Chưa nộp"}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
               </div>
-            ) : (
-              <p className="admin-empty">Tất cả nhân viên đã nộp báo cáo hôm nay 🎉</p>
             )}
           </div>
 
@@ -326,6 +465,7 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
       </div>
       ) : (
       <div className="dashboard-layout">
