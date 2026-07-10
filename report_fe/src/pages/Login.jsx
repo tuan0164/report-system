@@ -5,6 +5,7 @@ export default function Login() {
   const params = new URLSearchParams(window.location.search);
   const isDisabled = params.get("error") === "disabled";
   const isNotCompany = params.get("error") === "not_company";
+  const isSessionExpired = params.get("error") === "session_expired";
 
   const loginGoogle = () => {
     window.location.href = `${API_URL}/auth/google`;
@@ -28,6 +29,12 @@ export default function Login() {
         {isNotCompany && (
           <div className="alert alert-error login-alert">
             Chỉ tài khoản công ty HDC-Flowtech mới đăng nhập được. Vui lòng dùng email công ty
+          </div>
+        )}
+
+        {isSessionExpired && (
+          <div className="alert alert-error login-alert">
+            Phiên đăng nhập đã hết hạn hoặc bị hủy. Vui lòng đăng nhập lại.
           </div>
         )}
 

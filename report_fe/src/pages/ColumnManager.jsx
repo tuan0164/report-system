@@ -58,10 +58,6 @@ const emptyColForm = { name: "", label: "", data_type: "text", required: false, 
 export default function ColumnManager() {
   return (
     <div className="column-manager-page fade-in">
-      <div className="cm-header">
-        <h1 className="cm-header-title">Quản lý bảng</h1>
-      </div>
-
       <ColumnsTab />
     </div>
   );
@@ -396,17 +392,78 @@ function ColumnsTab() {
     }
   };
 
+  const hero = (
+    <div className="page-hero cm-hero">
+      <div>
+        <span className="page-hero-eyebrow">Quản lý</span>
+        <h1 className="page-hero-title">Quản lý trường báo cáo</h1>
+      </div>
+      <div className="page-hero-actions cm-add-selector" ref={addPanelRef}>
+        <button
+          className={`btn btn-primary btn-sm cm-add-btn${addPanelOpen ? " active" : ""}`}
+          onClick={() => setAddPanelOpen((o) => !o)}
+        >
+          <span className="cm-add-btn-icon">＋</span>
+          Thêm trường mới
+        </button>
+        {addPanelOpen && (
+          <div className="cm-add-panel">
+            <div className="cm-form-title">Thêm cột động mới</div>
+            <form onSubmit={handleAddColumn}>
+              <div className="cm-form-row">
+                <div className="form-group" style={{ margin: 0 }}>
+                  <input type="text" className="form-input" placeholder="Tên cột DB (VD: customer_name)"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <input type="text" className="form-input" placeholder="Label tiếng Việt (VD: Tên khách hàng)"
+                    value={form.label}
+                    onChange={(e) => setForm({ ...form, label: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <select className="form-select" value={form.data_type}
+                    onChange={(e) => setForm({ ...form, data_type: e.target.value })}>
+                    {DATA_TYPES.map((t) => (<option key={t.value} value={t.value}>{t.label}</option>))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <input type="number" className="form-input" placeholder="Thứ tự" min="0" style={{ width: 70 }}
+                    value={form.field_order}
+                    onChange={(e) => setForm({ ...form, field_order: parseInt(e.target.value) || 0 })} />
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", color: "var(--gray-600)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  <input type="checkbox" checked={form.required}
+                    onChange={(e) => setForm({ ...form, required: e.target.checked })}
+                    style={{ accentColor: "var(--color-primary)" }} />
+                  Bắt buộc
+                </label>
+                <div className="cm-form-actions">
+                  <button type="submit" className="btn btn-success btn-sm">Thêm</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="page-loading">
-        <div className="spinner spinner-lg"></div>
-        <p>Đang tải...</p>
-      </div>
+      <>
+        {hero}
+        <div className="page-loading">
+          <div className="spinner spinner-lg"></div>
+          <p>Đang tải...</p>
+        </div>
+      </>
     );
   }
 
   return (
     <>
+      {hero}
       {error && (
         <div className="alert alert-error" style={{ marginBottom: "0.75rem" }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
@@ -419,58 +476,6 @@ function ColumnsTab() {
           {success}
         </div>
       )}
-
-      <div className="cm-toolbar">
-        <div className="cm-add-selector" ref={addPanelRef}>
-          <button
-            className={`btn btn-outline btn-sm cm-add-btn${addPanelOpen ? " active" : ""}`}
-            onClick={() => setAddPanelOpen((o) => !o)}
-          >
-            <span className="cm-add-btn-icon">＋</span>
-            Thêm cột động mới
-            <span className="cm-add-caret">{addPanelOpen ? "▲" : "▼"}</span>
-          </button>
-          {addPanelOpen && (
-          <div className="cm-add-panel">
-            <div className="cm-form-title">Thêm cột động mới</div>
-            <form onSubmit={handleAddColumn}>
-              <div className="cm-form-row">
-            <div className="form-group" style={{ margin: 0 }}>
-              <input type="text" className="form-input" placeholder="Tên cột DB (VD: customer_name)"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <input type="text" className="form-input" placeholder="Label tiếng Việt (VD: Tên khách hàng)"
-                value={form.label}
-                onChange={(e) => setForm({ ...form, label: e.target.value })} />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <select className="form-select" value={form.data_type}
-                onChange={(e) => setForm({ ...form, data_type: e.target.value })}>
-                {DATA_TYPES.map((t) => (<option key={t.value} value={t.value}>{t.label}</option>))}
-              </select>
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <input type="number" className="form-input" placeholder="Thứ tự" min="0" style={{ width: 70 }}
-                value={form.field_order}
-                onChange={(e) => setForm({ ...form, field_order: parseInt(e.target.value) || 0 })} />
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", color: "var(--gray-600)", cursor: "pointer", whiteSpace: "nowrap" }}>
-              <input type="checkbox" checked={form.required}
-                onChange={(e) => setForm({ ...form, required: e.target.checked })}
-                style={{ accentColor: "var(--color-primary)" }} />
-              Bắt buộc
-            </label>
-            <div className="cm-form-actions">
-              <button type="submit" className="btn btn-success btn-sm">Thêm</button>
-            </div>
-              </div>
-            </form>
-          </div>
-          )}
-        </div>
-      </div>
 
       <div className="card cm-table-card">
         <div style={{ overflowX: "auto" }}>

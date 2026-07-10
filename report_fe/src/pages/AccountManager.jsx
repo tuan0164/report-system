@@ -48,20 +48,39 @@ export default function AccountManager() {
     return d || "Có lỗi xảy ra";
   };
 
+  // Tên hiển thị: ưu tiên tên trên báo cáo gần nhất
+  const displayName = (u) => u.report_full_name || u.full_name;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return users;
-    return users.filter((u) => (u.full_name || "").toLowerCase().includes(q));
+    return users.filter(
+      (u) =>
+        displayName(u).toLowerCase().includes(q) ||
+        (u.employee_code || "").toLowerCase().includes(q)
+    );
   }, [users, search]);
 
   const isSelf = (u) => meId !== null && String(u.id) === meId;
+
+  // PATCH chỉ trả về thông tin user, giữ lại dữ liệu lấy từ báo cáo
+  const mergeUser = (prev, updated) =>
+    prev.map((x) =>
+      x.id === updated.id
+        ? {
+            ...updated,
+            employee_code: x.employee_code,
+            report_full_name: x.report_full_name,
+          }
+        : x
+    );
 
   const handleRole = (u, role) => {
     if (role === u.role) return;
     setBusy(u.id);
     setError("");
     updateUserRole(u.id, role)
-      .then((res) => setUsers((prev) => prev.map((x) => (x.id === u.id ? res.data : x))))
+      .then((res) => setUsers((prev) => mergeUser(prev, res.data)))
       .catch((e) => setError(getErr(e)))
       .finally(() => setBusy(null));
   };
@@ -70,24 +89,27 @@ export default function AccountManager() {
     setBusy(u.id);
     setError("");
     updateUserActive(u.id, !u.is_active)
-      .then((res) => setUsers((prev) => prev.map((x) => (x.id === u.id ? res.data : x))))
+      .then((res) => setUsers((prev) => mergeUser(prev, res.data)))
       .catch((e) => setError(getErr(e)))
       .finally(() => setBusy(null));
   };
 
   return (
     <div className="acc-page">
-      <div className="acc-header">
-        <h1 className="acc-title">Quản lý tài khoản</h1>
+      <div className="page-hero">
+        <div>
+          <span className="page-hero-eyebrow">Quản lý</span>
+          <h1 className="page-hero-title">Quản lý tài khoản</h1>
+        </div>
       </div>
 
       <div className="card acc-toolbar">
         <div className="form-group" style={{ margin: 0, flex: 1 }}>
-          <label className="form-label">Tìm theo họ tên</label>
+          <label className="form-label">Tìm theo họ tên hoặc mã NV</label>
           <input
             type="text"
             className="form-input"
-            placeholder="Nhập họ tên..."
+            placeholder="Nhập họ tên hoặc mã NV..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -109,8 +131,7 @@ export default function AccountManager() {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Họ tên</th>
-                  <th>Email</th>
+                  <th>Nhân viên</th>
                   <th>Role</th>
                   <th>Trạng thái</th>
                   <th>Vô hiệu hóa</th>
@@ -122,10 +143,17 @@ export default function AccountManager() {
                   <tr key={u.id} className={u.is_active ? "" : "acc-row-disabled"}>
                     <td className="acc-col-id">{u.id}</td>
                     <td>
-                      {u.full_name}
-                      {isSelf(u) && <span className="acc-badge-self">bạn</span>}
+                      <div className="acc-user-cell">
+                        <span className="acc-user-name">
+                          {displayName(u)}
+                          {isSelf(u) && <span className="acc-badge-self">bạn</span>}
+                        </span>
+                        {u.employee_code && (
+                          <span className="acc-user-code">Mã NV : {u.employee_code}</span>
+                        )}
+                        <span className="acc-user-email">{u.email}</span>
+                      </div>
                     </td>
-                    <td className="acc-col-email">{u.email}</td>
                     <td>
                       <select
                         className="form-select acc-role-select"
@@ -177,7 +205,7 @@ export default function AccountManager() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={6}>
                       <div className="empty-state">
                         <span className="empty-state-icon">👤</span>
                         <p className="empty-state-text">Không tìm thấy tài khoản</p>
@@ -198,7 +226,9 @@ export default function AccountManager() {
               <div>
                 <h2 className="acc-modal-title">Lịch sử nộp báo cáo</h2>
                 <p className="acc-modal-sub">
-                  {historyUser.full_name} · {historyUser.email}
+                  {displayName(historyUser)}
+                  {historyUser.employee_code && ` · Mã NV : ${historyUser.employee_code}`}
+                  {` · ${historyUser.email}`}
                 </p>
               </div>
               <button

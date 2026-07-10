@@ -4,34 +4,6 @@
   padding: 1.5rem 1rem 3rem;
 }
 
-.acc-header {
-  margin-bottom: 1.25rem;
-}
-
-.acc-title {
-  position: relative;
-  display: inline-block;
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--brand-navy, #0a3d91);
-  background: var(--brand-gradient-soft, linear-gradient(135deg, #eef4ff 0%, #e6f7fb 100%));
-  padding: 0.6rem 1rem 0.6rem 1.1rem;
-  border-radius: var(--radius-md, 10px);
-  border: 1px solid #d7e3f5;
-}
-
-.acc-title::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 12%;
-  bottom: 12%;
-  width: 4px;
-  border-radius: 4px;
-  background: var(--brand-gradient, linear-gradient(135deg, #0a3d91, #1566d6, #06b6d4));
-}
-
 .acc-toolbar {
   display: flex;
   align-items: flex-end;
@@ -95,9 +67,27 @@
   font-variant-numeric: tabular-nums;
 }
 
-.acc-col-email {
-  color: var(--text-muted, #64748b);
-  font-size: 0.85rem;
+.acc-user-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 180px;
+}
+
+.acc-user-name {
+  font-weight: 600;
+  color: var(--text-main, #0f172a);
+}
+
+.acc-user-code {
+  font-size: 0.82rem;
+  color: var(--text-main, #334155);
+}
+
+.acc-user-email {
+  font-size: 0.8rem;
+  color: var(--text-muted, #94a3b8);
+  word-break: break-all;
 }
 
 .acc-badge-self {

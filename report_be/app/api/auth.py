@@ -1,3 +1,6 @@
+import logging
+
+from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter
 from fastapi import Request
 from fastapi import Depends
@@ -11,10 +14,19 @@ from app.models.models import User
 from app.core.security import create_access_token
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/auth",
     tags=["Auth"]
 )
+
+
+def _login_error(code: str) -> RedirectResponse:
+    return RedirectResponse(
+        url=f"{settings.FRONTEND_URL}/login?error={code}",
+        status_code=302,
+    )
 
 @router.get("/google")
 async def login_google(request: Request):
@@ -24,18 +36,25 @@ async def login_google(request: Request):
 
 @router.get("/google/callback", name="google_callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
-    token = await oauth.google.authorize_access_token(request)
-    userinfo = token["userinfo"]
+    try:
+        token = await oauth.google.authorize_access_token(request)
+    except OAuthError as exc:
+        # State hết hạn / user bấm hủy / mã đổi token không hợp lệ
+        logger.warning("Google OAuth callback thất bại: %s", exc.error)
+        return _login_error("session_expired")
+
+    userinfo = token.get("userinfo")
+    if not userinfo or not userinfo.get("email"):
+        logger.warning("Google OAuth callback thiếu userinfo")
+        return _login_error("session_expired")
+
     email = userinfo["email"]
 
     if not email.endswith("@hdc-flowtech.com"):#("@hdc-flowtech.com")
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=not_company",
-            status_code=302,
-        )
+        return _login_error("not_company")
 
     google_id = userinfo["sub"]
-    full_name = userinfo["name"]
+    full_name = userinfo.get("name") or email.split("@")[0]
 
     user = db.query(User).filter(User.email == email).first()
 
@@ -46,10 +65,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         db.refresh(user)
 
     if not user.is_active:
-        return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/login?error=disabled",
-            status_code=302,
-        )
+        return _login_error("disabled")
 
     access_token = create_access_token({
         "sub": str(user.id),

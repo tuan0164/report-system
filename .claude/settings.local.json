@@ -66,7 +66,10 @@
       "Bash(node -e \"1\")",
       "Bash(npx --yes esbuild --loader=jsx --log-level=error Dashboard.jsx)",
       "Bash(node -e \"const c=require\\('fs'\\).readFileSync\\('Dashboard.css','utf8'\\);let d=0;for\\(const ch of c\\){if\\(ch==='{'\\)d++;if\\(ch==='}'\\)d--;}console.log\\('brace',d\\)\")",
-      "Bash(node -e \"const c=require\\('fs'\\).readFileSync\\('src/pages/Dashboard.css','utf8'\\);let d=0;for\\(const ch of c\\){if\\(ch==='{'\\)d++;if\\(ch==='}'\\)d--;}console.log\\('brace',d\\)\")"
+      "Bash(node -e \"const c=require\\('fs'\\).readFileSync\\('src/pages/Dashboard.css','utf8'\\);let d=0;for\\(const ch of c\\){if\\(ch==='{'\\)d++;if\\(ch==='}'\\)d--;}console.log\\('brace',d\\)\")",
+      "Bash(cd /home/tuan/HDC/work_report/webapp/report_be && grep -rn \"SessionMiddleware\\\\|add_middleware\\\\|root_path\\\\|CORS\" app/main.py; echo \"=== config\"; sed -n '1,60p' app/core/config.py; echo \"=== google_service\"; cat app/services/google_service.py; echo \"=== env\"; cat ../.env 2>/dev/null | sed 's/=.*SECRET.*/=***/' | head -20)",
+      "Read(//home/tuan/HDC/work_report/**)",
+      "Bash(curl -s -i \"http://localhost/api/auth/google\")"
     ]
   }
 }

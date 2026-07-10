@@ -10,6 +10,7 @@ from app.dependencies.auth import (
 )
 from app.core.database import get_db
 from app.models.models import User
+from app.models.daily_report import Report
 from app.schemas.user import UserResponse, UserUpdate
 router = APIRouter(
     prefix="/users",
@@ -36,7 +37,41 @@ def list_users(
     db: Session = Depends(get_db),
     current_user=Depends(require_admin),
 ):
-    return db.query(User).order_by(User.id.desc()).all()
+    # Báo cáo mới nhất của mỗi email -> lấy mã nhân viên & họ tên
+    latest_report = (
+        db.query(
+            Report.email.label("email"),
+            Report.employee_code.label("employee_code"),
+            Report.full_name.label("report_full_name"),
+        )
+        .distinct(Report.email)
+        .order_by(Report.email, Report.report_date.desc(), Report.id.desc())
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            User,
+            latest_report.c.employee_code,
+            latest_report.c.report_full_name,
+        )
+        .outerjoin(latest_report, latest_report.c.email == User.email)
+        .order_by(User.id.desc())
+        .all()
+    )
+
+    return [
+        UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            role=user.role,
+            is_active=user.is_active,
+            employee_code=employee_code,
+            report_full_name=report_full_name,
+        )
+        for user, employee_code, report_full_name in rows
+    ]
 
 
 @router.patch("/{user_id}/role", response_model=UserResponse)

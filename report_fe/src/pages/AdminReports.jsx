@@ -195,20 +195,22 @@ export default function AdminReports() {
 
   return (
     <div className="admin-reports-page">
-      <div className="admin-reports-header">
-        <h1 className="admin-reports-title">Báo cáo tất cả nhân viên</h1>
-      </div>
+      <div className="page-hero">
+        <div>
+          <span className="page-hero-eyebrow">Quản lý</span>
+          <h1 className="page-hero-title">Báo cáo tất cả nhân viên</h1>
+        </div>
 
-      <div className="ar-toolbar">
-        <div className="ar-filter-selector" ref={filterPanelRef}>
+        <div className="page-hero-actions ar-filter-selector" ref={filterPanelRef}>
           <button
-            className={`btn btn-outline btn-sm ar-filter-btn${filterPanelOpen ? " active" : ""}`}
+            className={`btn btn-primary btn-sm ar-filter-btn${filterPanelOpen ? " active" : ""}`}
             onClick={() => setFilterPanelOpen((o) => !o)}
           >
-            <span className="ar-filter-btn-icon">⚲</span>
+            <svg className="ar-filter-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
             Lọc
             {activeFilterCount > 0 && <span className="ar-filter-count">{activeFilterCount}</span>}
-            <span className="ar-filter-caret">{filterPanelOpen ? "▲" : "▼"}</span>
           </button>
           {filterPanelOpen && (
             <div className="ar-filter-panel">

@@ -19,5 +19,9 @@ class UserResponse(BaseModel):
 
     is_active: bool = True
 
+    employee_code: Optional[str] = None
+
+    report_full_name: Optional[str] = None
+
     class Config:
         from_attributes = True
