@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { getMyReports } from "../api/dailyReport";
 import { getUsers, getAllReports } from "../api/reports";
+import { getDynamicColumns } from "../api/dynamicColumns";
 import "./Dashboard.css";
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
-const MONTHS = [
-  "tháng 1", "tháng 2", "tháng 3", "tháng 4", "tháng 5", "tháng 6",
-  "tháng 7", "tháng 8", "tháng 9", "tháng 10", "tháng 11", "tháng 12",
-];
+const DOW_FULL = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
 
 // Initials từ tên (2 chữ cái cuối — hợp tên tiếng Việt "Bùi Văn Tuấn" -> "VT").
 const initials = (name) => {
@@ -45,11 +43,21 @@ const PANEL_IC_CLASS = {
   not_submitted: "admin-panel-ic--warn",
   all: "admin-panel-ic--brand",
 };
-const PANEL_COUNT_CLASS = {
-  submitted: "admin-count--done",
-  not_submitted: "admin-count--warn",
-  all: "",
-};
+
+// Số nhân viên mỗi trang — lấp đầy lưới 3x4 rồi mới sang trang mới.
+const PAGE_SIZE = 12;
+
+// Bỏ dấu để dò nhãn cột động ("Dự định ngày mai") không phụ thuộc cách gõ dấu.
+const deaccent = (s) =>
+  (s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+
+const ymd = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -62,6 +70,13 @@ export default function Dashboard() {
   // Panel danh sách nhân viên dưới 3 thẻ. Mặc định "chưa nộp".
   const [panelKind, setPanelKind] = useState("not_submitted"); // submitted | not_submitted | all
   const [panelLoading, setPanelLoading] = useState(false);
+  const [page, setPage] = useState(1);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  const [openProjects, setOpenProjects] = useState(() => new Set());
+  const [showScrollFab, setShowScrollFab] = useState(false);
+  const [columns, setColumns] = useState([]); // cột động, để dò "Dự định ngày mai"
 
   useEffect(() => {
     api
@@ -84,6 +99,9 @@ export default function Dashboard() {
     getMyReports()
       .then((res) => setReports(Array.isArray(res.data) ? res.data : []))
       .catch(() => setReports([]));
+    getDynamicColumns()
+      .then((r) => setColumns(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setColumns([]));
   }, []);
 
   // Dự án của báo cáo gần nhất (rows sort id DESC ở BE -> phần tử [0]).
@@ -91,6 +109,40 @@ export default function Dashboard() {
     const p = reports[0]?.project;
     return Array.isArray(p) ? p.filter(Boolean) : [];
   }, [reports]);
+
+  // Tên gọi + ngày cho hero nhân viên.
+  // full_name ở report do user tự nhập (đúng thứ tự) -> ưu tiên; lấy chữ cuối làm tên gọi.
+  const heroName = useMemo(() => {
+    const full = reports[0]?.full_name || user?.full_name || "";
+    const parts = full.trim().split(/\s+/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : "bạn";
+  }, [reports, user]);
+
+  const todayLabel = useMemo(() => {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, "0");
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    return `${DOW_FULL[now.getDay()]}, ${dd}/${mm}/${now.getFullYear()}`;
+  }, []);
+
+  // "Kế hoạch hôm nay" = trường "Dự định ngày mai" của báo cáo gần nhất trước hôm nay.
+  const todayPlan = useMemo(() => {
+    const col = columns.find((c) => {
+      const l = deaccent(c.label);
+      return l.includes("du dinh") || l.includes("ngay mai");
+    });
+    if (!col) return null;
+
+    const todayStr = ymd(new Date());
+    const prev = reports
+      .filter((r) => r.report_date && String(r.report_date).slice(0, 10) < todayStr)
+      .sort((a, b) => String(b.report_date).localeCompare(String(a.report_date)))[0];
+
+    const raw = prev?.extra_fields?.[col.name];
+    const text = Array.isArray(raw) ? raw.filter(Boolean).join(", ") : raw;
+    if (text === null || text === undefined || String(text).trim() === "") return null;
+    return { label: col.label, text: String(text), date: String(prev.report_date).slice(0, 10) };
+  }, [columns, reports]);
 
   // Đã nộp báo cáo hôm nay chưa? -> đổi card thành "Sửa" để có đường sửa tường minh.
   const submittedToday = useMemo(() => {
@@ -136,7 +188,7 @@ export default function Dashboard() {
       cells.push({ day: d, status, isToday, key: iso });
     }
 
-    return { cells, label: `${MONTHS[month]}/${year}`, done, miss };
+    return { cells, label: `Tháng ${month + 1}/${year}`, done, miss };
   }, [reports, monthOffset]);
 
   // Tổng quan admin: nộp hôm nay, chưa nộp, dự án + người tham gia.
@@ -241,6 +293,59 @@ export default function Dashboard() {
     return filtered.sort((a, b) => a.displayName.localeCompare(b.displayName, "vi"));
   }, [panelKind, users, allReports]);
 
+  const pageCount = Math.max(1, Math.ceil(panelList.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = panelList.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // Đổi thẻ -> về trang 1.
+  useEffect(() => setPage(1), [panelKind]);
+
+  // Đóng dropdown khi bấm ra ngoài / bấm Esc.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    const onKey = (e) => e.key === "Escape" && setMenuOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  // FAB cuộn xuống — chỉ hiện khi trang còn phần chưa nhìn thấy.
+  useEffect(() => {
+    const onScroll = () => {
+      const doc = document.documentElement;
+      const rest = doc.scrollHeight - window.innerHeight - window.scrollY;
+      setShowScrollFab(rest > 80);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [pageRows.length, adminData.projects.length, openProjects]);
+
+  const toggleProject = (name) =>
+    setOpenProjects((prev) => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+
+  const logout = () => {
+    localStorage.removeItem("access_token");
+    navigate("/login");
+  };
+
+  const scrollToBottom = () =>
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+
   if (!user) {
     return (
       <div className="page-loading">
@@ -254,33 +359,87 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-page">
-      <div className="dashboard-welcome">
-        <h1 className="dashboard-greeting">HDC-Flowtech {user.full_name}</h1>
-        <div className="dashboard-subtitle">
-          <span className={`badge ${isAdmin ? "badge-info" : "badge-success"}`}>
-            {isAdmin ? "Quản trị viên" : "Nhân viên"}
-          </span>
-          <span>{user.email}</span>
-        </div>
-      </div>
-
       {isAdmin ? (
-      <div className="dashboard-layout">
-        <div className="dashboard-grid">
-          <div
-            className="card dashboard-card dashboard-card--orange"
-            onClick={() => navigate("/admin/reports")}
-          >
-            <div className="dashboard-card-icon dashboard-card-icon--orange">
+      <>
+        <div className="admin-hero">
+          <div className="admin-hero-main">
+            <span className="admin-hero-role">Quản trị viên</span>
+            <h1 className="admin-hero-title">HDC-Flowtech</h1>
+            <span className="admin-hero-email">{user.email}</span>
+          </div>
+
+          <div className="admin-hero-actions">
+            <div className="admin-hero-menu" ref={menuRef}>
+              <button
+                type="button"
+                className="admin-hero-dots"
+                aria-label="Menu quản trị"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((v) => !v)}
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="5" cy="12" r="1.7" />
+                  <circle cx="12" cy="12" r="1.7" />
+                  <circle cx="19" cy="12" r="1.7" />
+                </svg>
+              </button>
+
+              {menuOpen && (
+                <div className="admin-menu-pop" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="admin-menu-item"
+                    onClick={() => { setMenuOpen(false); navigate("/admin/columns"); }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                    Quản lý trường
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="admin-menu-item"
+                    onClick={() => { setMenuOpen(false); navigate("/admin/accounts"); }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 00-3-3.87" />
+                      <path d="M16 3.13a4 4 0 010 7.75" />
+                    </svg>
+                    Quản lý tài khoản
+                  </button>
+                  <div className="admin-menu-sep" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="admin-menu-item admin-menu-item--danger"
+                    onClick={() => { setMenuOpen(false); logout(); }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    Đăng xuất
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button type="button" className="admin-hero-cta" onClick={() => navigate("/admin/reports")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
                 <line x1="16" y1="13" x2="8" y2="13" />
                 <line x1="16" y1="17" x2="8" y2="17" />
               </svg>
-            </div>
-            <h3 className="dashboard-card-title">Xem báo cáo</h3>
-            <p className="dashboard-card-desc">Xem báo cáo tất cả nhân viên</p>
+              Xem báo cáo
+            </button>
           </div>
         </div>
 
@@ -294,16 +453,16 @@ export default function Dashboard() {
               onClick={() => openPanel("submitted")}
               onKeyDown={cardKey("submitted")}
             >
-              <span className="admin-stat-ic">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
-              </span>
-              <div className="admin-stat-body">
-                <span className="admin-stat-num kpi-num">{adminData.doneCount}</span>
+              <div className="admin-stat-top">
+                <span className="admin-stat-ic">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                </span>
                 <span className="admin-stat-label">Đã nộp hôm nay</span>
               </div>
+              <span className="admin-stat-num kpi-num">{adminData.doneCount}</span>
             </div>
 
             <div
@@ -314,16 +473,16 @@ export default function Dashboard() {
               onClick={() => openPanel("not_submitted")}
               onKeyDown={cardKey("not_submitted")}
             >
-              <span className="admin-stat-ic">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
-              </span>
-              <div className="admin-stat-body">
-                <span className="admin-stat-num kpi-num">{adminData.notSubmitted.length}</span>
+              <div className="admin-stat-top">
+                <span className="admin-stat-ic">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                </span>
                 <span className="admin-stat-label">Chưa nộp</span>
               </div>
+              <span className="admin-stat-num kpi-num">{adminData.notSubmitted.length}</span>
             </div>
 
             <div
@@ -334,18 +493,18 @@ export default function Dashboard() {
               onClick={() => openPanel("all")}
               onKeyDown={cardKey("all")}
             >
-              <span className="admin-stat-ic">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 00-3-3.87" />
-                  <path d="M16 3.13a4 4 0 010 7.75" />
-                </svg>
-              </span>
-              <div className="admin-stat-body">
-                <span className="admin-stat-num kpi-num">{adminData.total}</span>
+              <div className="admin-stat-top">
+                <span className="admin-stat-ic">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 00-3-3.87" />
+                    <path d="M16 3.13a4 4 0 010 7.75" />
+                  </svg>
+                </span>
                 <span className="admin-stat-label">Tổng nhân viên</span>
               </div>
+              <span className="admin-stat-num kpi-num">{adminData.total}</span>
             </div>
           </div>
 
@@ -367,17 +526,14 @@ export default function Dashboard() {
                     </svg>
                   ) : (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                      <line x1="12" y1="9" x2="12" y2="13" />
-                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
                     </svg>
                   )}
                 </span>
                 {PANEL_META[panelKind].title}
+                <span className="admin-panel-count">({panelList.length})</span>
               </h3>
-              <span className={`admin-count ${PANEL_COUNT_CLASS[panelKind]}`}>
-                {panelLoading ? "…" : panelList.length}
-              </span>
             </div>
 
             {panelLoading ? (
@@ -392,31 +548,72 @@ export default function Dashboard() {
                   : "Không có nhân viên nào"}
               </p>
             ) : (
-              <div className="emp-list">
-                {panelList.map((p) => {
-                  const [bg, fg] = avatarTone(p.displayName);
-                  return (
-                    <div key={p.id} className="emp-row">
-                      <span className="hdc-avatar emp-row-av" style={{ background: bg, color: fg }}>
-                        {initials(p.displayName)}
-                      </span>
-                      <div className="emp-row-body">
-                        <span className="emp-row-name">{p.displayName}</span>
-                        <span className="emp-row-meta">
-                          {p.code ? `Mã NV: ${p.code}` : "Chưa có mã NV"}
-                          {p.projects.length > 0 && ` · ${p.projects.join(", ")}`}
+              <>
+                <div className="emp-grid">
+                  {pageRows.map((p) => {
+                    const [bg, fg] = avatarTone(p.displayName);
+                    return (
+                      <div key={p.id} className="emp-chip" title={p.email}>
+                        <span className="hdc-avatar emp-chip-av" style={{ background: bg, color: fg }}>
+                          {initials(p.displayName)}
                         </span>
+                        <div className="emp-chip-body">
+                          <span className="emp-chip-name">{p.displayName}</span>
+                          <span className="emp-chip-code">
+                            {p.code ? `Mã NV: ${p.code}` : "Chưa có mã NV"}
+                          </span>
+                        </div>
+                        {panelKind === "all" && (
+                          <span
+                            className={`emp-dot emp-dot--${p.submitted ? "done" : "miss"}`}
+                            title={p.submitted ? "Đã nộp" : "Chưa nộp"}
+                          />
+                        )}
                       </div>
-                      {panelKind === "all" && (
-                        <span className={`emp-badge emp-badge--${p.submitted ? "done" : "miss"}`}>
-                          <span className="emp-badge-dot" />
-                          {p.submitted ? "Đã nộp" : "Chưa nộp"}
-                        </span>
-                      )}
+                    );
+                  })}
+                </div>
+
+                <div className="emp-foot">
+                  <span className="emp-foot-count">
+                    Hiển thị {pageRows.length} / {panelList.length}
+                  </span>
+
+                  {pageCount > 1 && (
+                    <div className="pager">
+                      <button
+                        type="button"
+                        className="pager-btn"
+                        onClick={() => setPage(safePage - 1)}
+                        disabled={safePage === 1}
+                        aria-label="Trang trước"
+                      >
+                        ‹
+                      </button>
+                      {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          className={`pager-btn${n === safePage ? " is-active" : ""}`}
+                          onClick={() => setPage(n)}
+                          aria-current={n === safePage ? "page" : undefined}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="pager-btn"
+                        onClick={() => setPage(safePage + 1)}
+                        disabled={safePage === pageCount}
+                        aria-label="Trang sau"
+                      >
+                        ›
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
 
@@ -430,241 +627,238 @@ export default function Dashboard() {
                   </svg>
                 </span>
                 Dự án đang thực hiện
+                <span className="admin-panel-count">({adminData.projects.length})</span>
               </h3>
-              <span className="admin-count">{adminData.projects.length}</span>
             </div>
             {adminData.projects.length > 0 ? (
               <div className="admin-proj-list">
-                {adminData.projects.map((p) => (
-                  <div key={p.name} className="admin-proj">
-                    <div className="admin-proj-head">
-                      <span className="admin-proj-name">{p.name}</span>
-                      <span className="admin-proj-count">{p.members.length} người</span>
+                {adminData.projects.map((p) => {
+                  const open = openProjects.has(p.name);
+                  const shown = p.members.slice(0, 3);
+                  const rest = p.members.length - shown.length;
+                  return (
+                    <div key={p.name} className={`admin-proj${open ? " is-open" : ""}`}>
+                      <button
+                        type="button"
+                        className="admin-proj-head"
+                        aria-expanded={open}
+                        onClick={() => toggleProject(p.name)}
+                      >
+                        <span className="admin-proj-name">{p.name}</span>
+                        <span className="avatar-stack">
+                          {shown.map((m, i) => {
+                            const [bg, fg] = avatarTone(m.name);
+                            return (
+                              <span
+                                key={i}
+                                className="hdc-avatar avatar-stack-av"
+                                style={{ background: bg, color: fg }}
+                                title={m.name}
+                              >
+                                {initials(m.name)}
+                              </span>
+                            );
+                          })}
+                          {rest > 0 && (
+                            <span className="hdc-avatar avatar-stack-av avatar-stack-more">+{rest}</span>
+                          )}
+                        </span>
+                        <span className="admin-proj-count">{p.members.length} người</span>
+                      </button>
+
+                      {open && (
+                        <div className="admin-proj-members">
+                          {p.members.map((m, i) => {
+                            const [bg, fg] = avatarTone(m.name);
+                            return (
+                              <div key={i} className="admin-member">
+                                <span className="hdc-avatar admin-member-av" style={{ background: bg, color: fg }}>
+                                  {initials(m.name)}
+                                </span>
+                                <div className="admin-member-body">
+                                  <span className="admin-member-name">{m.name}</span>
+                                  {m.code && <span className="admin-member-role">Mã NV: {m.code}</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <div className="admin-proj-members">
-                      {p.members.map((m, i) => {
-                        const [bg, fg] = avatarTone(m.name);
-                        return (
-                          <div key={i} className="admin-member">
-                            <span className="hdc-avatar admin-member-av" style={{ background: bg, color: fg }}>
-                              {initials(m.name)}
-                            </span>
-                            <div className="admin-member-body">
-                              <span className="admin-member-name">{m.name}</span>
-                              {m.code && <span className="admin-member-role">Mã NV: {m.code}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="admin-empty">Chưa có dự án nào</p>
             )}
           </div>
         </div>
-
-      </div>
+      </>
       ) : (
-      <div className="dashboard-layout">
-        <div className="dashboard-grid">
-          <div
-            className={`card dashboard-card dashboard-report-card ${submittedToday ? "is-done" : "is-todo"}`}
+      <div className="user-layout">
+        <div className="user-hero">
+          <div className="user-hero-main">
+            <span className="user-hero-role">Nhân viên</span>
+            <h1 className="user-hero-title">Chào {heroName}, hôm nay thế nào?</h1>
+            <span className="user-hero-date">{todayLabel}</span>
+          </div>
+          <span className="user-hero-avatar">{heroName.charAt(0).toUpperCase()}</span>
+        </div>
+
+        <div className="user-cards">
+          <button
+            type="button"
+            className={`card user-card user-card--report ${submittedToday ? "is-done" : "is-todo"}`}
             onClick={() => navigate("/report")}
           >
-            <div className="dashboard-report-top">
-              <div className="dashboard-card-icon dashboard-report-icon">
+            <div className="user-card-head">
+              <span className="user-card-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
-              </div>
-              <span className="dashboard-status-pill">
-                <span className="dashboard-status-dot" />
+              </span>
+              <span className="user-card-title">Báo cáo hôm nay</span>
+              <span className="user-card-pill">
+                <span className="user-card-dot" />
                 {submittedToday ? "Đã nộp" : "Chưa nộp"}
               </span>
             </div>
-            <h3 className="dashboard-card-title">{submittedToday ? "Sửa báo cáo hôm nay" : "Điền báo cáo hôm nay"}</h3>
-            <p className="dashboard-card-desc">{submittedToday ? "Bạn đã nộp — bấm để chỉnh sửa" : "Báo cáo công việc hàng ngày"}</p>
+            <p className="user-card-desc">
+              {submittedToday
+                ? "Bạn đã nộp hôm nay — bấm để chỉnh sửa"
+                : "Bấm để điền báo cáo công việc hôm nay"}
+            </p>
+          </button>
+
+          <div className="card user-card user-card--plan">
+            <div className="user-card-head">
+              <span className="user-card-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </span>
+              <span className="user-card-title">Kế hoạch hôm nay</span>
+            </div>
+            <p className="user-card-desc">
+              {todayPlan ? todayPlan.text : "Chưa có dự định nào từ báo cáo trước"}
+            </p>
+          </div>
+        </div>
+
+        <div className="card user-panel">
+          <div className="user-panel-head">
+            <h3 className="user-panel-title">
+              <span className="user-panel-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="7" width="20" height="14" rx="2" />
+                  <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" />
+                </svg>
+              </span>
+              Dự án đang tham gia
+            </h3>
           </div>
 
-          {isAdmin && (
-            <>
-              <div
-                className="card dashboard-card dashboard-card--orange"
-                onClick={() => navigate("/admin/reports")}
-              >
-                <div className="dashboard-card-icon dashboard-card-icon--orange">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
+          {latestProjects.length > 0 ? (
+            <div className="user-proj-list">
+              {latestProjects.map((p, i) => (
+                <div key={i} className="user-proj-row">
+                  <span className="user-proj-name">{p}</span>
+                  <svg className="user-proj-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6L9 17l-5-5" />
                   </svg>
                 </div>
-                <h3 className="dashboard-card-title">Xem báo cáo </h3>
-                <p className="dashboard-card-desc">Xem báo cáo tất cả nhân viên</p>
-              </div>
-
-              <div
-                className="card dashboard-card dashboard-card--purple"
-                onClick={() => navigate("/admin/columns")}
-              >
-                <div className="dashboard-card-icon dashboard-card-icon--purple">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-                  </svg>
-                </div>
-                <h3 className="dashboard-card-title">Quản lý trường </h3>
-                <p className="dashboard-card-desc">Thêm, sửa, xóa cột báo cáo</p>
-              </div>
-
-              <div
-                className="card dashboard-card dashboard-card--blue"
-                onClick={() => navigate("/admin/accounts")}
-              >
-                <div className="dashboard-card-icon dashboard-card-icon--blue">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 00-3-3.87" />
-                    <path d="M16 3.13a4 4 0 010 7.75" />
-                  </svg>
-                </div>
-                <h3 className="dashboard-card-title">Quản lý tài khoản</h3>
-                <p className="dashboard-card-desc">Phân quyền, khóa tài khoản</p>
-              </div>
-            </>
+              ))}
+            </div>
+          ) : (
+            <p className="admin-empty">Hiện tại bạn chưa tham gia dự án nào</p>
           )}
         </div>
 
-        <div className="dashboard-side">
-          <div className="card dashboard-panel">
-            <div className="dashboard-panel-head">
-              <h3 className="dashboard-panel-title">
-                <span className="dashboard-panel-icon dashboard-panel-icon--cyan">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="7" width="20" height="14" rx="2" />
-                    <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" />
-                  </svg>
-                </span>
-                Dự án đang tham gia
-              </h3>
+        <div className="card user-panel">
+          <div className="user-panel-head">
+            <h3 className="user-panel-title">
+              <span className="user-panel-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+              </span>
+              Lịch sử nộp báo cáo
+            </h3>
+
+            <div className="dashboard-cal-nav">
+              <button
+                type="button"
+                className="dashboard-cal-btn"
+                onClick={() => setMonthOffset((m) => m - 1)}
+                aria-label="Tháng trước"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <span className="dashboard-cal-month">{calendar.label}</span>
+              <button
+                type="button"
+                className="dashboard-cal-btn"
+                onClick={() => setMonthOffset((m) => Math.min(0, m + 1))}
+                disabled={monthOffset >= 0}
+                aria-label="Tháng sau"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
             </div>
-            {latestProjects.length > 0 ? (
-              <div className="dashboard-proj-list">
-                {latestProjects.map((p, i) => (
-                  <div key={i} className="dashboard-proj-item">
-                    <span className="dashboard-proj-ic">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="7" width="20" height="14" rx="2" />
-                        <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" />
-                      </svg>
-                    </span>
-                    <span className="dashboard-proj-item-name">{p}</span>
-                    <svg className="dashboard-proj-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 6L9 17l-5-5" />
-                    </svg>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="dashboard-panel-empty">Hiện tại bạn chưa tham gia dự án nào </p>
+          </div>
+
+          <div className="dashboard-cal-grid">
+            {WEEKDAYS.map((w) => (
+              <div key={w} className="dashboard-cal-dow">{w}</div>
+            ))}
+            {calendar.cells.map((c) =>
+              c.blank ? (
+                <div key={c.key} className="dashboard-cal-cell" />
+              ) : (
+                <div
+                  key={c.key}
+                  className={`dashboard-cal-cell dashboard-cal-${c.status}${c.isToday ? " dashboard-cal-today" : ""}`}
+                >
+                  <span className="dashboard-cal-day">{c.day}</span>
+                </div>
+              )
             )}
           </div>
 
-          <div className="card dashboard-panel">
-            <div className="dashboard-panel-head">
-              <h3 className="dashboard-panel-title">
-                <span className="dashboard-panel-icon dashboard-panel-icon--blue">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                </span>
-                Lịch sử nộp báo cáo
-              </h3>
-              <div className="dashboard-cal-nav">
-                <button
-                  type="button"
-                  className="dashboard-cal-btn"
-                  onClick={() => setMonthOffset((m) => m - 1)}
-                  aria-label="Tháng trước"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15 18 9 12 15 6" />
-                  </svg>
-                </button>
-                <span className="dashboard-cal-month">{calendar.label}</span>
-                <button
-                  type="button"
-                  className="dashboard-cal-btn"
-                  onClick={() => setMonthOffset((m) => Math.min(0, m + 1))}
-                  disabled={monthOffset >= 0}
-                  aria-label="Tháng sau"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <div className="dashboard-cal-grid">
-              {WEEKDAYS.map((w) => (
-                <div key={w} className="dashboard-cal-dow">{w}</div>
-              ))}
-              {calendar.cells.map((c) =>
-                c.blank ? (
-                  <div key={c.key} className="dashboard-cal-cell" />
-                ) : (
-                  <div
-                    key={c.key}
-                    className={`dashboard-cal-cell dashboard-cal-${c.status}${c.isToday ? " dashboard-cal-today" : ""}`}
-                  >
-                    <span className="dashboard-cal-day">{c.day}</span>
-                    {c.status === "submitted" && (
-                      <svg className="dashboard-cal-mk dashboard-cal-mk--yes" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M20 6L9 17l-5-5" />
-                      </svg>
-                    )}
-                    {c.status === "missing" && (
-                      <svg className="dashboard-cal-mk dashboard-cal-mk--no" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-
-            <div className="dashboard-cal-legend">
-              <span className="dashboard-cal-leg">
-                <i className="dashboard-cal-box dashboard-cal-box--yes">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                </i>
-                Đã nộp ({calendar.done})
-              </span>
-              <span className="dashboard-cal-leg">
-                <i className="dashboard-cal-box dashboard-cal-box--no">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </i>
-                Chưa nộp ({calendar.miss})
-              </span>
-              <span className="dashboard-cal-leg">
-                <i className="dashboard-cal-box dashboard-cal-box--off" />
-                Ngày nghỉ
-              </span>
-            </div>
+          <div className="dashboard-cal-legend">
+            <span className="dashboard-cal-leg">
+              <i className="dashboard-cal-box dashboard-cal-box--yes" />
+              Đã nộp ({calendar.done})
+            </span>
+            <span className="dashboard-cal-leg">
+              <i className="dashboard-cal-box dashboard-cal-box--no" />
+              Chưa nộp ({calendar.miss})
+            </span>
+            <span className="dashboard-cal-leg">
+              <i className="dashboard-cal-box dashboard-cal-box--off" />
+              Ngày nghỉ
+            </span>
           </div>
         </div>
       </div>
+      )}
+
+      {showScrollFab && (
+        <button type="button" className="scroll-fab" onClick={scrollToBottom} aria-label="Cuộn xuống cuối trang">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <polyline points="19 12 12 19 5 12" />
+          </svg>
+        </button>
       )}
     </div>
   );
