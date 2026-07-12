@@ -1,39 +1,26 @@
 fastapi==0.116.1
-
 uvicorn[standard]==0.35.0
-
 gunicorn==23.0.0
 
 sqlalchemy==2.0.43
-
 psycopg2-binary==2.9.10
-
 alembic==1.16.5
 
-python-jose[cryptography]==3.5.0
-
-passlib[bcrypt]==1.7.4
-
-bcrypt==4.3.0
-
-python-multipart==0.0.20
-
 pydantic==2.11.7
-
 pydantic-settings==2.10.1
 
+# Đăng nhập Google + JWT
 authlib==1.6.1
+python-jose[cryptography]==3.5.0
 
+# Dep gián tiếp nhưng bắt buộc, pin lại cho chắc:
+#   httpx          -> authlib gọi Google bằng cái này
+#   itsdangerous   -> SessionMiddleware của Starlette ký session cookie
+#   python-dotenv  -> pydantic-settings đọc file .env
+httpx==0.28.1
+itsdangerous==2.2.0
 python-dotenv==1.1.1
 
-fastapi-mail==1.5.0
-
-pdfplumber==0.11.7
-
-PyPDF2==3.0.1
-
-aiofiles==24.1.0
-
-httpx==0.28.1
- 
-itsdangerous==2.2.0
+# ĐÃ GỠ (grep ra 0 chỗ import; chỉ làm image nặng và tăng số CVE phải vá):
+#   pdfplumber, PyPDF2, fastapi-mail, aiofiles, python-multipart
+#   passlib[bcrypt], bcrypt  -> app chỉ đăng nhập qua Google, không băm mật khẩu nào

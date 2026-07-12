@@ -23,7 +23,11 @@ COPY . .
 EXPOSE 8000
 
 # 4 worker uvicorn. Chỉnh -w theo số CPU (khuyến nghị 2*core + 1)
+# --access-logfile - : ghi access log ra stdout. Không có nó thì prod mù,
+# không biết ai gọi gì khi có sự cố. Docker đã giới hạn log 3x10MB.
 CMD ["gunicorn", "app.main:app", \
      "-k", "uvicorn.workers.UvicornWorker", \
      "-w", "4", \
-     "-b", "0.0.0.0:8000"]
+     "-b", "0.0.0.0:8000", \
+     "--access-logfile", "-", \
+     "--forwarded-allow-ips", "*"]
