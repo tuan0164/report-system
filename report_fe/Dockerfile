@@ -19,8 +19,18 @@ RUN npm run build          # ra /app/dist
 FROM nginx:alpine
 # Copy static build
 COPY --from=build /app/dist /usr/share/nginx/html
-# Copy cấu hình nginx (route SPA + proxy /api)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Đặt vào /etc/nginx/templates/: entrypoint của ảnh nginx sẽ chạy envsubst,
+# thay ${AUTH_RATE} / ${AUTH_BURST} bằng biến môi trường, rồi ghi kết quả ra
+# /etc/nginx/conf.d/default.conf lúc container khởi động.
+# => đổi ngưỡng rate limit chỉ cần sửa .env + restart, KHÔNG phải build lại.
+# (envsubst chỉ thay đúng các biến có trong env, nên $uri/$host/$remote_addr
+#  của nginx không bị đụng tới.)
+COPY default.conf.template /etc/nginx/templates/default.conf.template
+
+# Giá trị mặc định, để container vẫn chạy được nếu quên đặt trong .env.
+ENV AUTH_RATE=60r/m \
+    AUTH_BURST=100
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
