@@ -59,10 +59,14 @@ webapp/
 ## Chạy PRODUCTION (Docker, all-in-one)
 
 ```bash
-# 1. Chuẩn bị biến môi trường backend
+# 1a. Thông tin DB (dùng chung cho postgres + backend)
+cp .env.example .env
+# Sinh mật khẩu mạnh và điền vào POSTGRES_PASSWORD:
+#   openssl rand -hex 24
+# Compose tự dựng DATABASE_URL cho backend từ file này.
+
+# 1b. Biến môi trường còn lại của backend (Google OAuth, JWT, cookie...)
 cp report_be/.env.example report_be/.env
-# Sửa report_be/.env — DATABASE_URL host phải là "postgres" (tên service):
-#   DATABASE_URL=postgresql://webapp:123456@postgres:5432/report
 
 # 2. Build + chạy toàn bộ
 docker compose -f docker-compose.prod.yml up -d --build
@@ -94,8 +98,9 @@ cd report_be
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# .env cho dev: DATABASE_URL trỏ localhost:5434
-#   DATABASE_URL=postgresql://webapp:123456@localhost:5434/report
+# .env cho dev: DATABASE_URL trỏ tới Postgres của bạn, ví dụ
+#   DATABASE_URL=postgresql://webapp:<mật-khẩu>@localhost:5432/report
+# Stack prod KHÔNG mở cổng DB ra host; muốn nối từ máy ngoài thì dùng SSH tunnel.
 
 uvicorn app.main:app --reload --port 8000
 ```

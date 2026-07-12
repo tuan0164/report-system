@@ -4,22 +4,32 @@
 #
 # LƯU Ý: file dev docker-compose.yml giữ nguyên. File này tách riêng.
 
+# Log Docker mặc định KHÔNG có giới hạn -> chạy vài tháng là đầy ổ đĩa
+# và cả server chết. Giữ tối đa 3 file x 10MB cho mỗi service.
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:18
     container_name: webapp-db
     restart: always
-    ports:
-      - "5434:5432"          # mở cho DataGrip local (prod thật: bỏ dòng này)
+    # KHÔNG map port ra host: chỉ backend cần, và nó đi qua mạng nội bộ Docker.
+    # Mở port ra host là phơi DB cho cả LAN/Internet tùy firewall.
+    # Cần xem DB bằng DataGrip? Dùng SSH tunnel, đừng mở port:
+    #   ssh -L 5434:localhost:5432 user@server   (rồi trỏ DataGrip vào localhost:5434)
     environment:
-      POSTGRES_USER: webapp
-      POSTGRES_PASSWORD: 123456
-      POSTGRES_DB: report
+      POSTGRES_USER: ${POSTGRES_USER:?thieu POSTGRES_USER trong .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?thieu POSTGRES_PASSWORD trong .env}
+      POSTGRES_DB: ${POSTGRES_DB:?thieu POSTGRES_DB trong .env}
     volumes:
       - pgdata:/var/lib/postgresql/18
-    # KHÔNG mở port ra host ở prod (chỉ backend trong mạng nội bộ cần)
+    logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U webapp -d report"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -30,13 +40,24 @@ services:
     restart: always
     env_file:
       - ./report_be/.env
-    # DATABASE_URL trong .env phải trỏ host = "postgres" (tên service), cổng 5432:
-    #   postgresql://<user>:<pass>@postgres:5432/<db>
+    environment:
+      # Dựng từ .env ở thư mục gốc -> mật khẩu DB chỉ nằm ở MỘT chỗ.
+      # Dòng này đè lên DATABASE_URL nếu env_file có (env > env_file).
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
         condition: service_healthy
     expose:
       - "8000"        # chỉ nội bộ, không map ra host
+    logging: *default-logging
+    healthcheck:
+      # Không dùng curl/wget: image python-slim không có. Dùng python có sẵn.
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else sys.exit(1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s   # chừa thời gian gunicorn khởi động 4 worker
 
   frontend:
     build:
@@ -45,10 +66,23 @@ services:
         VITE_API_URL: /api      # cùng origin, nginx proxy /api -> backend
     container_name: webapp-fe
     restart: always
+    environment:
+      # Ngưỡng rate limit cho /api/auth/. Sửa trong .env rồi:
+      #   docker compose -f docker-compose.prod.yml up -d frontend
+      # (không cần build lại image)
+      AUTH_RATE: ${AUTH_RATE:-60r/m}
+      AUTH_BURST: ${AUTH_BURST:-100}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
-      - "80:80"        # HTTP. Thêm nginx/certbot ngoài cho 443/HTTPS.
+      - "80:80"        # HTTP. Thêm Caddy/certbot phía trước cho 443/HTTPS.
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   pgdata:

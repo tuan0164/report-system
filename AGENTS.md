@@ -36,7 +36,7 @@ npm run lint     # ESLint
 docker compose up -d   # starts postgres on :5434
 ```
 
-DB credentials: `webapp:123456`, database `report`.
+DB credentials: đọc từ `.env` ở thư mục gốc (`POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`). Không hardcode.
 
 ## Important Notes
 
