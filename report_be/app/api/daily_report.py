@@ -26,23 +26,12 @@ STATIC_FIELDS = {
 }
 
 
-# Ràng buộc 1 báo cáo/ngày: report_date NOT NULL + unique (email, report_date).
-# Best-effort, chạy 1 lần khi load app — cùng cơ chế run_sql như các API cột động.
-def _ensure_report_day_constraints():
-    for sql in (
-        'ALTER TABLE "reports" ALTER COLUMN "report_date" SET DEFAULT CURRENT_DATE',
-        'UPDATE "reports" SET "report_date" = CURRENT_DATE WHERE "report_date" IS NULL',
-        'ALTER TABLE "reports" ALTER COLUMN "report_date" SET NOT NULL',
-        'CREATE UNIQUE INDEX IF NOT EXISTS uq_reports_email_date '
-        'ON "reports" ("email", "report_date")',
-    ):
-        try:
-            run_sql(sql)
-        except Exception:
-            pass
-
-
-_ensure_report_day_constraints()
+# Ràng buộc "1 báo cáo/ngày/người" (report_date NOT NULL + unique index trên
+# (email, report_date)) giờ nằm ở migration f4a5b6c7d8e9.
+#
+# Trước đây nó chạy ngay lúc import module này, và bọc trong "except: pass".
+# Index chưa bao giờ tạo được (bảng có bản ghi trùng làm nó fail) nhưng lỗi bị
+# nuốt im lặng, nên create_report() dưới đây dựa vào một lưới an toàn rỗng.
 
 
 def _active_dynamic(db: Session, data: dict) -> dict:

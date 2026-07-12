@@ -1,18 +1,21 @@
-from fastapi import HTTPException
+import logging
 import re
-from psycopg2 import pool
 from typing import Optional
-from app.core.config import settings
-DATABASE_URL = settings.DATABASE_URL
 
-connection_pool = pool.SimpleConnectionPool(1, 10, dsn=DATABASE_URL)
+from fastapi import HTTPException
 
-def get_connection():
-    return connection_pool.getconn()
+from app.core.database import engine
 
+logger = logging.getLogger(__name__)
 
-def release_connection(conn):
-    connection_pool.putconn(conn)
+# Trước đây file này tự mở một psycopg2 SimpleConnectionPool(1, 10) ngay lúc
+# import. Hai vấn đề:
+#   1. minconn=1 => nối DB ngay khi import module. DB chưa lên là app chết
+#      lúc khởi động, chứ không phải lỗi ở request đầu tiên.
+#   2. Pool đó không bao giờ tự nối lại. Postgres restart là mọi connection
+#      trong pool thành xác chết, và run_sql lỗi vĩnh viễn.
+# Giờ dùng chung pool của SQLAlchemy engine: nó có pool_pre_ping nên tự loại
+# connection chết, và chỉ nối khi thật sự cần.
 
 ALLOWED_TABLES = {"reports"}
 
@@ -62,7 +65,9 @@ def validate_type(data_type: str) -> str:
 
 
 def run_sql(sql: str, params: tuple = None, fetch: bool = False):
-    conn = get_connection()
+    # raw_connection() lấy connection psycopg2 từ pool của SQLAlchemy, nên
+    # cú pháp %s và cursor giữ nguyên như cũ. close() trả nó về pool.
+    conn = engine.raw_connection()
     try:
         cur = conn.cursor()
         cur.execute(sql, params)
@@ -73,11 +78,14 @@ def run_sql(sql: str, params: tuple = None, fetch: bool = False):
         if fetch:
             return [dict(zip(columns, row)) for row in result]
         return None
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        # Lỗi Postgres thô lộ tên bảng, tên cột, ràng buộc -> phơi cấu trúc DB
+        # cho người lạ. Ghi đầy đủ vào log server, trả về câu chung chung.
+        logger.exception("Lỗi SQL: %s", sql)
+        raise HTTPException(status_code=400, detail="Thao tác với cơ sở dữ liệu thất bại")
     finally:
-        release_connection(conn)
+        conn.close()
 
 
 def log_audit(action: str, table: str, column: Optional[str], detail: str = "", performed_by: str = "ADMIN"):
