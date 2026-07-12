@@ -4,6 +4,7 @@ from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter
 from fastapi import Request
 from fastapi import Depends
+from fastapi import Response
 from fastapi.responses import RedirectResponse
 
 from sqlalchemy.orm import Session
@@ -22,11 +23,37 @@ router = APIRouter(
 )
 
 
+def _set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=settings.ACCESS_TOKEN_COOKIE_NAME,
+        value=token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_HOURS * 3600,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/",
+    )
+
+
+def _clear_auth_cookie(response: Response) -> None:
+    # Các thuộc tính phải khớp lúc set, nếu không trình duyệt bỏ qua lệnh xóa.
+    response.delete_cookie(
+        key=settings.ACCESS_TOKEN_COOKIE_NAME,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/",
+    )
+
+
 def _login_error(code: str) -> RedirectResponse:
-    return RedirectResponse(
+    response = RedirectResponse(
         url=f"{settings.FRONTEND_URL}/login?error={code}",
         status_code=302,
     )
+    _clear_auth_cookie(response)
+    return response
+
 
 @router.get("/google")
 async def login_google(request: Request):
@@ -73,7 +100,22 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         "role": user.role
     })
 
-    return RedirectResponse(
-        url=f"{settings.FRONTEND_URL}/login-success?token={access_token}",
-        status_code=302  
+    # Token đi trong cookie HttpOnly, KHÔNG nhét vào query string:
+    # query string bị ghi vào access log của nginx, lịch sử trình duyệt
+    # và header Referer khi user bấm sang site khác.
+    response = RedirectResponse(
+        url=f"{settings.FRONTEND_URL}/login-success",
+        status_code=302,
     )
+    _set_auth_cookie(response, access_token)
+
+    # State OAuth dùng xong thì bỏ, không giữ trong session cookie.
+    request.session.clear()
+
+    return response
+
+
+@router.post("/logout")
+def logout(response: Response):
+    _clear_auth_cookie(response)
+    return {"detail": "Đã đăng xuất"}

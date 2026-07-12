@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api/client";
+import { useAuth } from "../auth/context";
 import { getMyReports } from "../api/dailyReport";
 import { getUsers, getAllReports } from "../api/reports";
 import { getDynamicColumns } from "../api/dynamicColumns";
@@ -61,7 +61,7 @@ const ymd = (d) =>
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const { user, logout } = useAuth();
   const [reports, setReports] = useState([]);
   const [users, setUsers] = useState([]); // admin: toàn user
   const [allReports, setAllReports] = useState([]); // admin: toàn report
@@ -79,23 +79,16 @@ export default function Dashboard() {
   const [columns, setColumns] = useState([]); // cột động, để dò "Dự định ngày mai"
 
   useEffect(() => {
-    api
-      .get("/users/me")
-      .then((res) => {
-        setUser(res.data);
-        if (res.data.role === "ADMIN") {
-          getUsers()
-            .then((r) => setUsers(Array.isArray(r.data) ? r.data : []))
-            .catch(() => setUsers([]));
-          getAllReports()
-            .then((r) => setAllReports(Array.isArray(r.data) ? r.data : []))
-            .catch(() => setAllReports([]));
-        }
-      })
-      .catch(() => {
-        localStorage.removeItem("access_token");
-        navigate("/login");
-      });
+    if (user?.role !== "ADMIN") return;
+    getUsers()
+      .then((r) => setUsers(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setUsers([]));
+    getAllReports()
+      .then((r) => setAllReports(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setAllReports([]));
+  }, [user]);
+
+  useEffect(() => {
     getMyReports()
       .then((res) => setReports(Array.isArray(res.data) ? res.data : []))
       .catch(() => setReports([]));
@@ -337,11 +330,6 @@ export default function Dashboard() {
       next.has(name) ? next.delete(name) : next.add(name);
       return next;
     });
-
-  const logout = () => {
-    localStorage.removeItem("access_token");
-    navigate("/login");
-  };
 
   const scrollToBottom = () =>
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });

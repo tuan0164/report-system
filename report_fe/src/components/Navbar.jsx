@@ -1,35 +1,16 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import api from "../api/client";
+import { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "../auth/context";
 import "./Navbar.css";
 
 export default function Navbar() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) return;
-    api
-      .get("/users/me")
-      .then((res) => setUser(res.data))
-      .catch(() => {
-        localStorage.removeItem("access_token");
-        navigate("/login");
-      });
-  }, [location.pathname]);
 
   const isActive = (path) => {
     if (path === "/dashboard") return location.pathname === "/dashboard";
     return location.pathname.startsWith(path);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    setUser(null);
-    navigate("/login");
   };
 
   const getInitials = (name) => {
@@ -48,15 +29,13 @@ export default function Navbar() {
     location.pathname === "/login" ||
     location.pathname === "/login-success";
 
-  const token = localStorage.getItem("access_token");
-
   return (
     <nav className="navbar">
       <Link to="/dashboard" className="navbar-brand" title="HDC-Flowtech WorkReport">
         <img src="https://hdc-flowtech.com/assets/logo-horizontal.png" alt="HDC-Flowtech" className="navbar-brand-logo" />
       </Link>
 
-      {token && user && !isLoginPage && (
+      {user && !isLoginPage && (
         <>
           <button
             className="navbar-menu-toggle"
@@ -151,7 +130,7 @@ export default function Navbar() {
               <span className="navbar-user-name">{user?.full_name}</span>
               <span className="navbar-user-role">{isAdmin ? "Admin" : "User"}</span>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={handleLogout} title="Đăng xuất">
+            <button className="btn btn-ghost btn-sm" onClick={logout} title="Đăng xuất">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
                 <polyline points="16 17 21 12 16 7" />

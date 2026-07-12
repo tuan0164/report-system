@@ -1,23 +1,24 @@
 import { Navigate } from "react-router-dom";
-import { jwtDecode } from "jwt-decode";
+import { useAuth } from "../auth/context";
 
 export default function PrivateRoute({ children, requiredRole }) {
-  const token = localStorage.getItem("access_token");
+  const { user, loading } = useAuth();
 
-  if (!token) {
-    return <Navigate to="/login" />;
+  if (loading) {
+    return (
+      <div className="page-loading">
+        <div className="spinner spinner-lg"></div>
+        <p>Đang tải...</p>
+      </div>
+    );
   }
 
-  if (requiredRole) {
-    let decoded;
-    try {
-      decoded = jwtDecode(token);
-    } catch {
-      return <Navigate to="/login" />;
-    }
-    if (decoded.role !== requiredRole) {
-      return <Navigate to="/dashboard" />;
-    }
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (requiredRole && user.role !== requiredRole) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;
